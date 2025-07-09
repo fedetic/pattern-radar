@@ -145,8 +145,9 @@ const LandingPage = () => {
                 variant="outline"
                 size="lg"
                 className="border-border/50 hover:bg-muted/50 px-8 py-3 text-lg"
+                onClick={() => navigate("/dashboard")}
               >
-                View Demo
+                Continue as Guest
               </Button>
             </div>
           </div>
@@ -306,8 +307,9 @@ const LandingPage = () => {
                   variant="outline"
                   size="lg"
                   className="border-border/50 hover:bg-muted/50 px-8 py-3 text-lg"
+                  onClick={() => navigate("/dashboard")}
                 >
-                  Learn More
+                  Continue as Guest
                 </Button>
               </div>
             </div>
