@@ -136,9 +136,9 @@ const LandingPage = () => {
               <Button
                 size="lg"
                 className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 text-lg font-semibold"
-                onClick={() => navigate("/dashboard")}
+                onClick={() => navigate("/auth")}
               >
-                Start Analyzing
+                Sign Up
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
               <Button
@@ -298,7 +298,7 @@ const LandingPage = () => {
                 <Button
                   size="lg"
                   className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 text-lg font-semibold"
-                  onClick={() => navigate("/dashboard")}
+                  onClick={() => navigate("/auth")}
                 >
                   Get Started Now
                   <ArrowRight className="ml-2 h-5 w-5" />
