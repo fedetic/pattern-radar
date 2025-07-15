@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -13,14 +13,6 @@ import { TrendingUp, Activity, BarChart3, Zap } from "lucide-react";
 import ChartDisplay from "./ChartDisplay";
 import PatternAnalysisPanel from "./PatternAnalysisPanel";
 
-const tradingPairs = [
-  { value: "BTC-USD", label: "BTC/USD" },
-  { value: "ETH-USD", label: "ETH/USD" },
-  { value: "SOL-USD", label: "SOL/USD" },
-  { value: "BNB-USD", label: "BNB/USD" },
-  { value: "ADA-USD", label: "ADA/USD" },
-];
-
 const timeframes = [
   { value: "1h", label: "1H" },
   { value: "4h", label: "4H" },
@@ -30,11 +22,35 @@ const timeframes = [
 ];
 
 const Home = () => {
-  const [selectedPair, setSelectedPair] = useState(tradingPairs[0].value);
-  const [selectedTimeframe, setSelectedTimeframe] = useState(
-    timeframes[2].value,
-  );
+  const [tradingPairs, setTradingPairs] = useState<{ value: string; label: string }[]>([]);
+  const [selectedPair, setSelectedPair] = useState<string>("");
+  const [selectedTimeframe, setSelectedTimeframe] = useState(timeframes[2].value);
   const [selectedPattern, setSelectedPattern] = useState<string | null>(null);
+  const [loadingPairs, setLoadingPairs] = useState(true);
+  const [errorPairs, setErrorPairs] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoadingPairs(true);
+    fetch("http://127.0.0.1:8000/pairs")
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch trading pairs");
+        return res.json();
+      })
+      .then((data) => {
+        // Expecting data to be an array of { symbol, label } or similar
+        const pairs = data.map((pair: any) => ({
+          value: pair.symbol || pair.value,
+          label: pair.label || pair.symbol || pair.value,
+        }));
+        setTradingPairs(pairs);
+        setSelectedPair(pairs[0]?.value || "");
+        setLoadingPairs(false);
+      })
+      .catch((err) => {
+        setErrorPairs(err.message || "Error fetching trading pairs");
+        setLoadingPairs(false);
+      });
+  }, []);
 
   // Mock data for patterns - in a real app this would come from the API
   const mockPatterns = [
@@ -176,18 +192,24 @@ const Home = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Select value={selectedPair} onValueChange={setSelectedPair}>
-                  <SelectTrigger className="w-[200px] bg-background/50 border-border/50 backdrop-blur-sm">
-                    <SelectValue placeholder="Select trading pair" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tradingPairs.map((pair) => (
-                      <SelectItem key={pair.value} value={pair.value}>
-                        {pair.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {loadingPairs ? (
+                  <div className="text-muted-foreground">Loading pairs...</div>
+                ) : errorPairs ? (
+                  <div className="text-red-500">{errorPairs}</div>
+                ) : (
+                  <Select value={selectedPair} onValueChange={setSelectedPair} disabled={tradingPairs.length === 0}>
+                    <SelectTrigger className="w-[200px] bg-background/50 border-border/50 backdrop-blur-sm">
+                      <SelectValue placeholder="Select trading pair" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tradingPairs.map((pair) => (
+                        <SelectItem key={pair.value} value={pair.value}>
+                          {pair.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
           </div>
@@ -233,7 +255,6 @@ const Home = () => {
               <ChartDisplay
                 tradingPair={selectedPair}
                 timeframe={selectedTimeframe}
-                selectedPattern={selectedPattern}
               />
             </div>
           </div>
