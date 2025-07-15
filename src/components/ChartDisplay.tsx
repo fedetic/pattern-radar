@@ -14,13 +14,15 @@ import { TrendingUp, TrendingDown, Volume2, Clock } from "lucide-react";
 interface ChartDisplayProps {
   tradingPair?: string;
   onPatternSelect?: (patternId: string) => void;
+  timeframe: string;
 }
 
 const ChartDisplay = ({
   tradingPair = "BTC/USDT",
   onPatternSelect = () => {},
+  timeframe,
 }: ChartDisplayProps) => {
-  const [timeframe, setTimeframe] = useState("1d");
+  // Removed internal timeframe state
 
   // Mock data for chart - in a real app this would come from an API
   const chartPlaceholder = {
@@ -72,7 +74,7 @@ const ChartDisplay = ({
       <div className="bg-background/30 backdrop-blur-sm border border-border/50 rounded-xl p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div className="flex items-center gap-3">
-            <Select value={timeframe} onValueChange={setTimeframe}>
+            <Select value={timeframe} onValueChange={() => {}} disabled>
               <SelectTrigger className="w-[120px] bg-background/50 border-border/50">
                 <SelectValue placeholder="Timeframe" />
               </SelectTrigger>

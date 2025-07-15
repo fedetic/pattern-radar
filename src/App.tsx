@@ -52,7 +52,7 @@ function App() {
           />
           <Route path="/dashboard" element={<Home />} />
         </Routes>
-        {import.meta.env.VITE_TEMPO === "true" && useRoutes(routes)}
+        {/* {import.meta.env.VITE_TEMPO === "true" && useRoutes(routes)} */}
       </>
     </Suspense>
   );
