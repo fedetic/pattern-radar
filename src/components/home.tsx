@@ -22,12 +22,15 @@ const timeframes = [
 ];
 
 const Home = () => {
-  const [tradingPairs, setTradingPairs] = useState<{ value: string; label: string }[]>([]);
+  const [tradingPairs, setTradingPairs] = useState<{ value: string; label: string; coin_id: string }[]>([]);
   const [selectedPair, setSelectedPair] = useState<string>("");
   const [selectedTimeframe, setSelectedTimeframe] = useState(timeframes[2].value);
   const [selectedPattern, setSelectedPattern] = useState<string | null>(null);
   const [loadingPairs, setLoadingPairs] = useState(true);
   const [errorPairs, setErrorPairs] = useState<string | null>(null);
+  const [patterns, setPatterns] = useState<any[]>([]);
+  const [marketData, setMarketData] = useState<any[]>([]);
+  const [loadingPatterns, setLoadingPatterns] = useState(false);
 
   useEffect(() => {
     setLoadingPairs(true);
@@ -37,10 +40,10 @@ const Home = () => {
         return res.json();
       })
       .then((data) => {
-        // Expecting data to be an array of { symbol, label } or similar
         const pairs = data.map((pair: any) => ({
-          value: pair.symbol || pair.value,
+          value: pair.coin_id || pair.symbol || pair.value,
           label: pair.label || pair.symbol || pair.value,
+          coin_id: pair.coin_id || pair.symbol,
         }));
         setTradingPairs(pairs);
         setSelectedPair(pairs[0]?.value || "");
@@ -52,105 +55,36 @@ const Home = () => {
       });
   }, []);
 
-  // Mock data for patterns - in a real app this would come from the API
-  const mockPatterns = [
-    {
-      id: "c1",
-      name: "Head and Shoulders",
-      category: "Chart" as const,
-      strength: 87,
-      description: "Bearish reversal pattern",
-      timeframe: "1d",
-    },
-    {
-      id: "c2",
-      name: "Double Bottom",
-      category: "Chart" as const,
-      strength: 75,
-      description: "Bullish reversal pattern",
-      timeframe: "1d",
-    },
-    {
-      id: "ca1",
-      name: "Hammer",
-      category: "Candle" as const,
-      strength: 92,
-      description: "Bullish reversal candle",
-      timeframe: "4h",
-    },
-    {
-      id: "ca2",
-      name: "Shooting Star",
-      category: "Candle" as const,
-      strength: 68,
-      description: "Bearish reversal candle",
-      timeframe: "4h",
-    },
-    {
-      id: "v1",
-      name: "Volume Climax",
-      category: "Volume-Based" as const,
-      strength: 81,
-      description: "Exhaustion move",
-      timeframe: "1d",
-    },
-    {
-      id: "v2",
-      name: "Volume Divergence",
-      category: "Volume-Based" as const,
-      strength: 73,
-      description: "Trend weakness",
-      timeframe: "4h",
-    },
-    {
-      id: "p1",
-      name: "Breakout",
-      category: "Price Action" as const,
-      strength: 89,
-      description: "Price breaking resistance",
-      timeframe: "1h",
-    },
-    {
-      id: "p2",
-      name: "Support Test",
-      category: "Price Action" as const,
-      strength: 65,
-      description: "Price testing support level",
-      timeframe: "1h",
-    },
-    {
-      id: "h1",
-      name: "Gartley",
-      category: "Harmonic" as const,
-      strength: 78,
-      description: "Harmonic reversal pattern",
-      timeframe: "1d",
-    },
-    {
-      id: "h2",
-      name: "Butterfly",
-      category: "Harmonic" as const,
-      strength: 71,
-      description: "Harmonic extension pattern",
-      timeframe: "1d",
-    },
-    {
-      id: "s1",
-      name: "Mean Reversion",
-      category: "Statistical" as const,
-      strength: 83,
-      description: "Price returning to average",
-      timeframe: "4h",
-    },
-    {
-      id: "s2",
-      name: "Momentum Shift",
-      category: "Statistical" as const,
-      strength: 76,
-      description: "Change in price momentum",
-      timeframe: "4h",
-    },
-  ];
+  // Fetch patterns when pair or timeframe changes
+  useEffect(() => {
+    if (!selectedPair) return;
+
+    setLoadingPatterns(true);
+    const coinId = selectedPair;
+    const days = selectedTimeframe === "1h" ? 7 : selectedTimeframe === "4h" ? 14 : selectedTimeframe === "1d" ? 30 : selectedTimeframe === "1w" ? 90 : 180;
+
+    fetch(`http://127.0.0.1:8000/patterns/${coinId}?days=${days}&timeframe=${selectedTimeframe}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch patterns");
+        return res.json();
+      })
+      .then((data) => {
+        setPatterns(data.patterns || []);
+        setMarketData(data.market_data || []);
+        // Auto-select strongest pattern
+        if (data.strongest_pattern) {
+          setSelectedPattern(data.strongest_pattern.name);
+        }
+        setLoadingPatterns(false);
+      })
+      .catch((err) => {
+        console.error("Error fetching patterns:", err);
+        setPatterns([]);
+        setMarketData([]);
+        setLoadingPatterns(false);
+      });
+  }, [selectedPair, selectedTimeframe]);
+
 
   const handlePatternSelect = (patternId: string) => {
     setSelectedPattern(patternId === selectedPattern ? null : patternId);
@@ -255,6 +189,10 @@ const Home = () => {
               <ChartDisplay
                 tradingPair={selectedPair}
                 timeframe={selectedTimeframe}
+                marketData={marketData}
+                patterns={patterns}
+                selectedPattern={selectedPattern}
+                onPatternSelect={handlePatternSelect}
               />
             </div>
           </div>
@@ -273,11 +211,24 @@ const Home = () => {
                   </p>
                 </div>
               </div>
-              <PatternAnalysisPanel
-                patterns={mockPatterns}
-                onPatternSelect={handlePatternSelect}
-                selectedPatternId={selectedPattern}
-              />
+              {loadingPatterns ? (
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-muted-foreground">Analyzing patterns...</div>
+                </div>
+              ) : (
+                <PatternAnalysisPanel
+                  patterns={patterns.map(pattern => ({
+                    id: pattern.name,
+                    name: pattern.name,
+                    category: pattern.category,
+                    strength: pattern.confidence,
+                    description: pattern.description,
+                    timeframe: selectedTimeframe
+                  }))}
+                  onPatternSelect={handlePatternSelect}
+                  selectedPatternId={selectedPattern}
+                />
+              )}
             </div>
           </div>
         </div>
