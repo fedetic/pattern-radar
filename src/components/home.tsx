@@ -61,7 +61,7 @@ const Home = () => {
 
     setLoadingPatterns(true);
     const coinId = selectedPair;
-    const days = selectedTimeframe === "1h" ? 7 : selectedTimeframe === "4h" ? 14 : selectedTimeframe === "1d" ? 30 : selectedTimeframe === "1w" ? 90 : 180;
+    const days = selectedTimeframe === "1h" ? 30 : selectedTimeframe === "4h" ? 90 : selectedTimeframe === "1d" ? 365 : selectedTimeframe === "1w" ? 720 : 1095;
 
     fetch(`http://127.0.0.1:8000/patterns/${coinId}?days=${days}&timeframe=${selectedTimeframe}`)
       .then((res) => {
@@ -189,6 +189,7 @@ const Home = () => {
               <ChartDisplay
                 tradingPair={selectedPair}
                 timeframe={selectedTimeframe}
+                onTimeframeChange={setSelectedTimeframe}
                 marketData={marketData}
                 patterns={patterns}
                 selectedPattern={selectedPattern}
@@ -233,58 +234,6 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Pattern Categories Legend */}
-        <div className="trading-card p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-primary/20 rounded-lg">
-              <Zap className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">Pattern Categories</h2>
-              <p className="text-sm text-muted-foreground">
-                Available pattern types for analysis
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <Badge
-              variant="outline"
-              className="justify-center py-2 bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20 transition-colors"
-            >
-              Chart Patterns
-            </Badge>
-            <Badge
-              variant="outline"
-              className="justify-center py-2 bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20 transition-colors"
-            >
-              Candle Patterns
-            </Badge>
-            <Badge
-              variant="outline"
-              className="justify-center py-2 bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20 transition-colors"
-            >
-              Volume-Based
-            </Badge>
-            <Badge
-              variant="outline"
-              className="justify-center py-2 bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-colors"
-            >
-              Price Action
-            </Badge>
-            <Badge
-              variant="outline"
-              className="justify-center py-2 bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20 transition-colors"
-            >
-              Harmonic
-            </Badge>
-            <Badge
-              variant="outline"
-              className="justify-center py-2 bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
-            >
-              Statistical
-            </Badge>
-          </div>
-        </div>
       </div>
     </div>
   );
