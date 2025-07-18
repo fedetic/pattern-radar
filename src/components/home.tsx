@@ -30,6 +30,7 @@ const Home = () => {
   const [errorPairs, setErrorPairs] = useState<string | null>(null);
   const [patterns, setPatterns] = useState<any[]>([]);
   const [marketData, setMarketData] = useState<any[]>([]);
+  const [marketInfo, setMarketInfo] = useState<any>(null);
   const [loadingPatterns, setLoadingPatterns] = useState(false);
 
   useEffect(() => {
@@ -71,6 +72,7 @@ const Home = () => {
       .then((data) => {
         setPatterns(data.patterns || []);
         setMarketData(data.market_data || []);
+        setMarketInfo(data.market_info || null);
         // Auto-select strongest pattern
         if (data.strongest_pattern) {
           setSelectedPattern(data.strongest_pattern.name);
@@ -191,6 +193,7 @@ const Home = () => {
                 timeframe={selectedTimeframe}
                 onTimeframeChange={setSelectedTimeframe}
                 marketData={marketData}
+                marketInfo={marketInfo}
                 patterns={patterns}
                 selectedPattern={selectedPattern}
                 onPatternSelect={handlePatternSelect}

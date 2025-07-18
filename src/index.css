@@ -123,71 +123,27 @@
   }
 }
 
-/* React Financial Charts Axis Color Override */
+/* Plotly chart styling */
 @layer utilities {
-  /* Force white colors on all chart axis elements with maximum specificity */
-  .chart-container svg text,
-  .chart-container svg g text,
-  .chart-container svg .axis text,
-  .chart-container svg .tick text,
-  svg text,
-  svg g text,
-  svg .axis text,
-  svg .tick text {
-    fill: #FFFFFF !important;
-    font-size: 12px !important;
+  /* Plotly specific styling for dark theme */
+  .chart-container .js-plotly-plot {
+    background: transparent !important;
   }
   
-  /* Axis lines and borders with maximum specificity */
-  .chart-container svg .axis path,
-  .chart-container svg .axis line,
-  .chart-container svg .domain,
-  .chart-container svg .tick line,
-  svg .axis path,
-  svg .axis line,
-  svg .domain,
-  svg .tick line {
-    stroke: #FFFFFF !important;
+  .chart-container .plotly .modebar {
+    background: rgba(0, 0, 0, 0.1) !important;
+    border-radius: 8px !important;
+    padding: 4px !important;
   }
   
-  /* React financial charts specific with container class */
-  .chart-container .react-financial-charts svg text,
-  .react-financial-charts svg text {
-    fill: #FFFFFF !important;
+  .chart-container .plotly .modebar-btn {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 4px !important;
+    margin: 1px !important;
   }
   
-  .chart-container .react-financial-charts svg .axis path,
-  .chart-container .react-financial-charts svg .axis line,
-  .chart-container .react-financial-charts svg .domain,
-  .chart-container .react-financial-charts svg .tick line,
-  .react-financial-charts svg .axis path,
-  .react-financial-charts svg .axis line,
-  .react-financial-charts svg .domain,
-  .react-financial-charts svg .tick line {
-    stroke: #FFFFFF !important;
-  }
-  
-  /* Nuclear option - target every possible SVG text and line element */
-  .chart-container svg * text {
-    fill: #FFFFFF !important;
-  }
-  
-  .chart-container svg * path[stroke],
-  .chart-container svg * line[stroke] {
-    stroke: #FFFFFF !important;
-  }
-  
-  /* Grid lines remain subtle */
-  svg .grid-line {
-    stroke: #374151 !important;
-    opacity: 0.3 !important;
-  }
-  
-  /* Preserve chart data colors */
-  svg .candlestick,
-  svg .line-series,
-  svg .series {
-    stroke: initial;
-    fill: initial;
+  .chart-container .plotly .modebar-btn:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
   }
 }
