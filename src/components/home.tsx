@@ -17,14 +17,12 @@ const timeframes = [
   { value: "1h", label: "1H" },
   { value: "4h", label: "4H" },
   { value: "1d", label: "1D" },
-  { value: "1w", label: "1W" },
-  { value: "1m", label: "1M" },
 ];
 
 const Home = () => {
   const [tradingPairs, setTradingPairs] = useState<{ value: string; label: string; coin_id: string }[]>([]);
   const [selectedPair, setSelectedPair] = useState<string>("");
-  const [selectedTimeframe, setSelectedTimeframe] = useState(timeframes[2].value);
+  const [selectedTimeframe, setSelectedTimeframe] = useState("1d");
   const [selectedPattern, setSelectedPattern] = useState<string | null>(null);
   const [loadingPairs, setLoadingPairs] = useState(true);
   const [errorPairs, setErrorPairs] = useState<string | null>(null);
@@ -62,7 +60,7 @@ const Home = () => {
 
     setLoadingPatterns(true);
     const coinId = selectedPair;
-    const days = selectedTimeframe === "1h" ? 30 : selectedTimeframe === "4h" ? 90 : selectedTimeframe === "1d" ? 365 : selectedTimeframe === "1w" ? 720 : 1095;
+    const days = selectedTimeframe === "1h" ? 7 : selectedTimeframe === "4h" ? 30 : selectedTimeframe === "1d" ? 365 : 365;
 
     fetch(`http://127.0.0.1:8000/patterns/${coinId}?days=${days}&timeframe=${selectedTimeframe}`)
       .then((res) => {
@@ -88,8 +86,92 @@ const Home = () => {
   }, [selectedPair, selectedTimeframe]);
 
 
+  // Validate pattern for visualization capability
+  const isPatternVisualizable = (pattern: any) => {
+    if (!pattern) return false;
+    
+    const coords = pattern.coordinates;
+    if (!coords) {
+      // Patterns without coordinates can use fallback visualization
+      // They're visualizable if they have basic required fields
+      return pattern.name && pattern.direction && pattern.category;
+    }
+    
+    const coordType = coords.type;
+    
+    // Check coordinate type requirements
+    switch (coordType) {
+      case 'pattern_range':
+        return coords.start_time && coords.end_time && 
+               coords.pattern_high !== undefined && coords.pattern_low !== undefined;
+      
+      case 'volume_pattern':
+        return coords.timestamp && coords.volume !== undefined;
+      
+      case 'statistical_pattern':
+        return coords.timestamp && coords.price !== undefined;
+      
+      case 'horizontal_line':
+        return coords.level !== undefined && coords.start_time && coords.end_time;
+      
+      case 'harmonic_pattern':
+        return coords.points && Array.isArray(coords.points) && coords.points.length >= 2;
+      
+      default:
+        // Unknown coordinate type - allow fallback visualization if basic fields exist
+        return pattern.name && pattern.direction && pattern.category;
+    }
+  };
+
+  // Filter patterns to only include visualizable ones
+  const visualizablePatterns = patterns.filter(isPatternVisualizable);
+
   const handlePatternSelect = (patternId: string) => {
     setSelectedPattern(patternId === selectedPattern ? null : patternId);
+  };
+
+  const handleZoomPatternUpdate = async (startTime: string, endTime: string) => {
+    if (!selectedPair) return;
+    
+    try {
+      // Step 1: Reset patterns immediately to show user that analysis is restarting
+      setPatterns([]);
+      setSelectedPattern(null);
+      setLoadingPatterns(true);
+      
+      const coinId = selectedPair;
+      
+      // Step 2: Call the filtered patterns endpoint for the new timeframe
+      const url = `http://127.0.0.1:8000/patterns/${coinId}/filtered?start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}&timeframe=${selectedTimeframe}`;
+      
+      const response = await fetch(url);
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Step 3: Update with new patterns found in the selected timeframe
+        const newPatterns = data.patterns || [];
+        setPatterns(newPatterns);
+        
+        // Step 4: Auto-select strongest pattern if available, otherwise keep selection clear
+        if (data.strongest_pattern && newPatterns.length > 0) {
+          setSelectedPattern(data.strongest_pattern.name);
+        }
+        
+        // Log the pattern reset and new scan for debugging
+        console.log(`Pattern scan completed for timeframe ${startTime} to ${endTime}: found ${newPatterns.length} patterns`);
+      } else {
+        console.warn('Failed to fetch filtered patterns:', response.status);
+        // Keep patterns empty on error to show that scan failed
+        setPatterns([]);
+      }
+    } catch (error) {
+      console.error('Error fetching filtered patterns:', error);
+      // Reset to empty patterns on error
+      setPatterns([]);
+    } finally {
+      setLoadingPatterns(false);
+    }
   };
 
   return (
@@ -170,23 +252,6 @@ const Home = () => {
                     </p>
                   </div>
                 </div>
-                <Tabs
-                  value={selectedTimeframe}
-                  onValueChange={setSelectedTimeframe}
-                  className="w-auto"
-                >
-                  <TabsList className="bg-background/50 border border-border/50">
-                    {timeframes.map((timeframe) => (
-                      <TabsTrigger
-                        key={timeframe.value}
-                        value={timeframe.value}
-                        className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
-                      >
-                        {timeframe.label}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
               </div>
               <ChartDisplay
                 tradingPair={selectedPair}
@@ -194,9 +259,11 @@ const Home = () => {
                 onTimeframeChange={setSelectedTimeframe}
                 marketData={marketData}
                 marketInfo={marketInfo}
-                patterns={patterns}
+                patterns={visualizablePatterns}
                 selectedPattern={selectedPattern}
                 onPatternSelect={handlePatternSelect}
+                onZoomPatternUpdate={handleZoomPatternUpdate}
+                loadingPatterns={loadingPatterns}
               />
             </div>
           </div>
@@ -221,7 +288,7 @@ const Home = () => {
                 </div>
               ) : (
                 <PatternAnalysisPanel
-                  patterns={patterns.map(pattern => ({
+                  patterns={visualizablePatterns.map(pattern => ({
                     id: pattern.name,
                     name: pattern.name,
                     category: pattern.category,

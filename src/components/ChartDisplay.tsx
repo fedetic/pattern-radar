@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -9,7 +9,8 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Volume2, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { TrendingUp, TrendingDown, Volume2, Clock, DollarSign, BarChart3, Eye, EyeOff } from "lucide-react";
 import Plot from "react-plotly.js";
 import { PlotData, Layout, Config } from "plotly.js";
 
@@ -22,6 +23,8 @@ interface ChartDisplayProps {
   marketInfo?: any;
   patterns?: any[];
   selectedPattern?: string | null;
+  onZoomPatternUpdate?: (startTime: string, endTime: string) => void;
+  loadingPatterns?: boolean;
 }
 
 const ChartDisplay = ({
@@ -33,8 +36,13 @@ const ChartDisplay = ({
   marketInfo = null,
   patterns = [],
   selectedPattern,
+  onZoomPatternUpdate = () => {},
+  loadingPatterns = false,
 }: ChartDisplayProps) => {
   const [chartType, setChartType] = useState("candlestick");
+  const [zoomRange, setZoomRange] = useState<{start: string, end: string} | null>(null);
+  const [showVolume, setShowVolume] = useState(true);
+  const plotRef = useRef<any>(null);
 
   // Enhanced pattern information mapping
   const getPatternInfo = (patternName: string, direction: string) => {
@@ -359,10 +367,16 @@ const ChartDisplay = ({
         trading: direction === "bullish" ? "Enter long at extreme extension with very tight stops." : "Enter short at extreme extension with very tight stops.",
         reliability: "Very High - deep crab patterns offer extreme risk/reward scenarios"
       },
-      "Perfect Pattern": {
-        meaning: "Ideal harmonic pattern with perfect Fibonacci ratios and optimal market structure.",
-        significance: "Perfect patterns represent textbook harmonic formations with highest probability.",
-        trading: direction === "bullish" ? "Enter long with high confidence at perfect completion zone." : "Enter short with high confidence at perfect completion zone.",
+      "Perfect Bullish Pattern": {
+        meaning: "Ideal bullish harmonic pattern with perfect Fibonacci ratios and optimal market structure.",
+        significance: "Perfect bullish patterns represent textbook harmonic formations with highest probability for upward moves.",
+        trading: "Enter long with high confidence at perfect completion zone.",
+        reliability: "Excellent - perfect patterns have highest success rates in harmonic trading"
+      },
+      "Perfect Bearish Pattern": {
+        meaning: "Ideal bearish harmonic pattern with perfect Fibonacci ratios and optimal market structure.",
+        significance: "Perfect bearish patterns represent textbook harmonic formations with highest probability for downward moves.",
+        trading: "Enter short with high confidence at perfect completion zone.",
         reliability: "Excellent - perfect patterns have highest success rates in harmonic trading"
       },
       // Statistical Patterns (20 patterns)
@@ -496,7 +510,7 @@ const ChartDisplay = ({
     };
   };
 
-  // Get patterns for current selection
+  // Get patterns for current selection (patterns are already filtered in Home component)
   const selectedPatternData = useMemo(() => {
     if (!selectedPattern || !patterns || patterns.length === 0) return null;
     return patterns.find(p => p.name === selectedPattern);
@@ -564,6 +578,78 @@ const ChartDisplay = ({
     }
   }, [chartData, marketInfo, timeframe]);
 
+  // Track debounce timer to prevent multiple simultaneous updates
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Handle chart zoom/pan events for dynamic pattern updates
+  const handleChartUpdate = useCallback((figure: any) => {
+    if (!figure || !figure.layout || !figure.layout.xaxis) return;
+    
+    const xaxis = figure.layout.xaxis;
+    const startTime = xaxis.range?.[0];
+    const endTime = xaxis.range?.[1];
+    
+    // Only proceed if we have actual range data and it's not auto-range
+    if (startTime && endTime && xaxis.autorange !== true) {
+      // Convert to proper ISO strings for API compatibility
+      let startISO, endISO;
+      try {
+        startISO = new Date(startTime).toISOString();
+        endISO = new Date(endTime).toISOString();
+      } catch (error) {
+        console.error('Error converting times to ISO format:', error);
+        return;
+      }
+      
+      const newRange = { start: startISO, end: endISO };
+      
+      // Calculate the time span of the current selection
+      const currentSpan = new Date(endTime).getTime() - new Date(startTime).getTime();
+      const oneHour = 3600000; // 1 hour in milliseconds
+      
+      // Use more conservative thresholds to avoid interfering with normal zoom operations
+      let threshold = oneHour; // Default 1 hour - much more conservative
+      if (timeframe === '1h') {
+        threshold = Math.max(1800000, currentSpan * 0.2); // 30 minutes or 20% of span, whichever is larger
+      } else if (timeframe === '4h') {
+        threshold = Math.max(3600000, currentSpan * 0.25); // 1 hour or 25% of span
+      } else if (timeframe === '1d') {
+        threshold = Math.max(7200000, currentSpan * 0.3); // 2 hours or 30% of span
+      }
+      
+      // Check if zoom range has changed significantly (much more conservative)
+      const rangeChanged = !zoomRange || 
+        Math.abs(new Date(zoomRange.start).getTime() - new Date(startISO).getTime()) > threshold ||
+        Math.abs(new Date(zoomRange.end).getTime() - new Date(endISO).getTime()) > threshold;
+      
+      if (rangeChanged) {
+        setZoomRange(newRange);
+        
+        // Clear any existing debounce timer
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+        }
+        
+        // Set new debounce timer with longer delay to let chart operations complete
+        debounceTimerRef.current = setTimeout(() => {
+          if (onZoomPatternUpdate && startISO && endISO) {
+            onZoomPatternUpdate(startISO, endISO);
+          }
+          debounceTimerRef.current = null;
+        }, 1000); // Increased delay to 1 second
+      }
+    }
+  }, [zoomRange, onZoomPatternUpdate, timeframe]);
+
   // Determine pattern duration for visualization
   const getPatternDuration = (patternName: string) => {
     const singleCandle = ['Doji', 'Hammer', 'Hanging Man', 'Shooting Star', 'Dragonfly Doji', 'Gravestone Doji', 'Marubozu', 'Spinning Top'];
@@ -601,6 +687,7 @@ const ChartDisplay = ({
         },
         name: 'OHLC',
         showlegend: false,
+        yaxis: 'y1',
         // Configure candlestick width based on timeframe and data density
         whiskerwidth: 0.8,
         line: {
@@ -617,11 +704,36 @@ const ChartDisplay = ({
         line: { color: '#3B82F6', width: 2 },
         name: 'Close Price',
         showlegend: false,
+        yaxis: 'y1'
+      });
+    }
+    
+    // Add volume bars as a subplot if volume is enabled
+    if (showVolume) {
+      traces.push({
+        type: 'bar',
+        x: chartData.map(d => d.x),
+        y: chartData.map(d => d.volume || 0),
+        marker: {
+          color: chartData.map(d => {
+            // Color volume bars based on price movement
+            if (d.close > d.open) {
+              return 'rgba(16, 185, 129, 0.6)'; // Green for bullish
+            } else {
+              return 'rgba(239, 68, 68, 0.6)'; // Red for bearish
+            }
+          }),
+          line: { width: 0 }
+        },
+        name: 'Volume',
+        showlegend: false,
+        yaxis: 'y2',
+        hovertemplate: 'Volume: %{y:,.0f}<extra></extra>'
       });
     }
     
     return traces;
-  }, [chartData, chartType]);
+  }, [chartData, chartType, showVolume]);
   
   // Create pattern shapes and annotations for plotly
   const patternShapes = useMemo(() => {
@@ -632,9 +744,84 @@ const ChartDisplay = ({
     const direction = selectedPatternData.direction;
     const color = direction === 'bullish' ? '#10B981' : direction === 'bearish' ? '#EF4444' : '#F59E0B';
     
+    // Add pattern duration markers (vertical dotted lines) for all pattern types
+    const addPatternDurationMarkers = (startTime: string, endTime: string) => {
+      const yMax = chartData.length > 0 ? Math.max(...chartData.map(d => d.high)) * 1.05 : 1;
+      const yMin = chartData.length > 0 ? Math.min(...chartData.map(d => d.low)) * 0.95 : 0;
+      
+      // Start marker (vertical dotted line)
+      shapes.push({
+        type: 'line',
+        x0: startTime,
+        x1: startTime,
+        y0: yMin,
+        y1: yMax,
+        line: {
+          color: color,
+          width: 2,
+          dash: 'dot'
+        },
+        layer: 'above'
+      });
+      
+      // End marker (vertical dotted line)
+      if (startTime !== endTime) {
+        shapes.push({
+          type: 'line',
+          x0: endTime,
+          x1: endTime,
+          y0: yMin,
+          y1: yMax,
+          line: {
+            color: color,
+            width: 2,
+            dash: 'dot'
+          },
+          layer: 'above'
+        });
+      }
+    };
+    
     // Handle different coordinate types
-    if (coords.type === 'pattern_range') {
+    if (coords.type === 'volume_pattern') {
+      // Volume pattern visualization on the volume subplot
+      const timestamp = coords.timestamp;
+      const volume = coords.volume || 1000;
+      
+      // Add pattern duration markers
+      addPatternDurationMarkers(timestamp, timestamp);
+      
+      shapes.push({
+        type: 'rect',
+        xref: 'x',
+        yref: 'y2', // Reference the volume y-axis
+        x0: timestamp,
+        x1: timestamp,
+        y0: 0,
+        y1: volume * 1.2,
+        fillcolor: color + '40',
+        line: { color, width: 3 },
+        layer: 'above'
+      });
+      
+      // Add annotation for volume pattern
+      shapes.push({
+        type: 'circle',
+        xref: 'x',
+        yref: 'y2',
+        x0: new Date(new Date(timestamp).getTime() - 1800000).toISOString(), // 30 min before
+        x1: new Date(new Date(timestamp).getTime() + 1800000).toISOString(), // 30 min after
+        y0: volume * 0.8,
+        y1: volume * 1.3,
+        fillcolor: color + '20',
+        line: { color, width: 2, dash: 'dot' }
+      });
+      
+    } else if (coords.type === 'pattern_range') {
       const patternDuration = getPatternDuration(selectedPatternData.name);
+      
+      // Add pattern duration markers
+      addPatternDurationMarkers(coords.start_time, coords.end_time);
       
       if (patternDuration === 1) {
         // Single candlestick pattern - horizontal line
@@ -700,6 +887,10 @@ const ChartDisplay = ({
     // Handle harmonic patterns
     else if (coords.type === 'harmonic_pattern') {
       if (coords.points && coords.points.length > 1) {
+        // Add pattern duration markers for harmonic patterns
+        const firstPoint = coords.points[0];
+        const lastPoint = coords.points[coords.points.length - 1];
+        addPatternDurationMarkers(firstPoint.timestamp, lastPoint.timestamp);
         for (let i = 0; i < coords.points.length - 1; i++) {
           shapes.push({
             type: 'line',
@@ -716,6 +907,8 @@ const ChartDisplay = ({
     // Handle statistical patterns
     else if (coords.type === 'statistical_pattern') {
       if (coords.timestamp) {
+        // Add pattern duration markers for statistical patterns
+        addPatternDurationMarkers(coords.timestamp, coords.timestamp);
         const dataPoint = chartData.find(d => d.x === coords.timestamp);
         if (dataPoint) {
           const centerX = new Date(dataPoint.x).getTime();
@@ -734,6 +927,11 @@ const ChartDisplay = ({
     
     // Horizontal line patterns (support/resistance)
     else if (coords.type === 'horizontal_line') {
+      // Add pattern duration markers for horizontal line patterns
+      if (coords.start_time && coords.end_time) {
+        addPatternDurationMarkers(coords.start_time, coords.end_time);
+      }
+      
       shapes.push({
         type: 'line',
         x0: chartData[0]?.x,
@@ -748,12 +946,156 @@ const ChartDisplay = ({
       });
     }
     
+    // Handle unknown/unhandled coordinate types
+    else {
+      console.warn(`Unknown coordinate type "${coords.type}" for pattern "${selectedPatternData.name}". Using fallback visualization.`);
+      
+      // Try to extract any timestamp information for duration markers
+      const timestamp = coords.timestamp || coords.start_time || coords.end_time;
+      if (timestamp) {
+        addPatternDurationMarkers(timestamp, timestamp);
+      }
+      
+      // Create a simple marker shape for unknown coordinate types
+      const latestPoint = chartData[chartData.length - 1];
+      if (latestPoint) {
+        shapes.push({
+          type: 'rect',
+          x0: latestPoint.x,
+          x1: latestPoint.x,
+          y0: latestPoint.low * 0.995,
+          y1: latestPoint.high * 1.005,
+          fillcolor: color + '20',
+          line: { color, width: 2, dash: 'dot' }
+        });
+      }
+    }
+    
+    // Enhanced fallback visualization logic
+    if (selectedPatternData) {
+      const hasCoordinates = selectedPatternData.coordinates;
+      const hasValidShapes = shapes.length > 0;
+      
+      // Debug logging for pattern visualization issues
+      console.log(`Pattern visualization debug for "${selectedPatternData.name}":`, {
+        hasCoordinates: !!hasCoordinates,
+        coordinateType: hasCoordinates ? hasCoordinates.type : 'none',
+        hasValidShapes,
+        shapesGenerated: shapes.length
+      });
+      
+      // Apply fallback if:
+      // 1. No coordinates exist, OR
+      // 2. Coordinates exist but no shapes were generated (failed coordinate handling)
+      if (!hasCoordinates || !hasValidShapes) {
+        console.log(`Applying fallback visualization for "${selectedPatternData.name}" (${!hasCoordinates ? 'no coordinates' : 'coordinates failed to generate shapes'})`);
+        
+        // Add fallback duration markers
+        const recentData = chartData.slice(-5); // Last 5 data points
+        const latestPoint = chartData[chartData.length - 1];
+        if (latestPoint && recentData.length > 0) {
+          const startPoint = recentData[0];
+          addPatternDurationMarkers(startPoint.x, latestPoint.x);
+        }
+        
+        // Generate fallback visualization based on pattern category and recent data
+        const fallbackShape = generateFallbackPatternShape(selectedPatternData, chartData);
+        if (fallbackShape) {
+          shapes.push(fallbackShape);
+          console.log(`Added fallback shape for "${selectedPatternData.name}"`);
+        } else {
+          console.warn(`Failed to generate fallback shape for "${selectedPatternData.name}"`);
+        }
+      } else {
+        console.log(`Pattern "${selectedPatternData.name}" successfully visualized with ${shapes.length} shapes`);
+      }
+    }
+    
     return shapes;
   }, [selectedPatternData, chartData]);
+
+  // Generate fallback pattern shape when coordinates are missing or unhandled
+  const generateFallbackPatternShape = (pattern: any, data: any[]) => {
+    if (data.length === 0) return null;
+
+    const direction = pattern.direction;
+    const color = direction === 'bullish' ? '#10B981' : direction === 'bearish' ? '#EF4444' : '#F59E0B';
+    
+    // Use the most recent data points for visualization
+    const recentData = data.slice(-5); // Last 5 data points
+    const latestPoint = data[data.length - 1];
+    
+    if (!latestPoint) return null;
+
+    // Create a visual marker based on pattern category
+    const patternCategory = pattern.category?.toLowerCase() || 'unknown';
+    
+    if (patternCategory.includes('candle') || patternCategory.includes('chart')) {
+      // Candlestick or chart pattern - use horizontal line near latest price
+      return {
+        type: 'line',
+        x0: recentData[0]?.x || latestPoint.x,
+        x1: latestPoint.x,
+        y0: latestPoint.close,
+        y1: latestPoint.close,
+        line: {
+          color: color,
+          width: 3,
+          dash: 'dash'
+        }
+      };
+    } else if (patternCategory.includes('volume')) {
+      // Volume pattern - use volume bar highlight on the volume subplot
+      const volumeValue = latestPoint.volume || 1000;
+      
+      return {
+        type: 'rect',
+        xref: 'x',
+        yref: 'y2', // Reference the volume y-axis
+        x0: latestPoint.x,
+        x1: latestPoint.x,
+        y0: 0,
+        y1: volumeValue * 1.1,
+        fillcolor: color + '30',
+        line: { color, width: 3 }
+      };
+    } else if (patternCategory.includes('harmonic') || patternCategory.includes('statistical')) {
+      // Complex pattern - use rectangle highlight
+      const startPoint = recentData[0] || latestPoint;
+      
+      return {
+        type: 'rect',
+        x0: startPoint.x,
+        x1: latestPoint.x,
+        y0: Math.min(...recentData.map(d => d.low)),
+        y1: Math.max(...recentData.map(d => d.high)),
+        fillcolor: color + '10',
+        line: { color, width: 2, dash: 'dot' }
+      };
+    }
+    
+    // Default fallback - simple line marker
+    return {
+      type: 'line',
+      x0: latestPoint.x,
+      x1: latestPoint.x,
+      y0: latestPoint.low * 0.99,
+      y1: latestPoint.high * 1.01,
+      line: {
+        color: color,
+        width: 4
+      }
+    };
+  };
   
   // Create pattern annotations
   const patternAnnotations = useMemo(() => {
-    if (!selectedPatternData?.coordinates) return [];
+    if (!selectedPatternData) return [];
+    
+    // If no coordinates, generate fallback annotation
+    if (!selectedPatternData.coordinates) {
+      return generateFallbackPatternAnnotation(selectedPatternData, chartData);
+    }
     
     const coords = selectedPatternData.coordinates;
     const annotations = [];
@@ -843,68 +1185,128 @@ const ChartDisplay = ({
     }
     
     return annotations;
-  }, [selectedPatternData]);
+  }, [selectedPatternData, chartData]);
 
-  // Create plotly layout with improved candlestick rendering
-  const plotlyLayout: Partial<Layout> = {
-    plot_bgcolor: 'rgba(0,0,0,0)',
-    paper_bgcolor: 'rgba(0,0,0,0)',
-    font: { color: '#e5e7eb', family: 'Inter, sans-serif' },
-    margin: { l: 60, r: 80, t: 20, b: 60 },
-    xaxis: {
-      type: 'date',
-      gridcolor: 'rgba(75, 85, 99, 0.2)',
-      linecolor: 'rgba(75, 85, 99, 0.5)',
-      tickcolor: 'rgba(75, 85, 99, 0.5)',
-      showgrid: true,
-      rangeslider: { visible: false },
-      // Improve candlestick spacing based on timeframe
-      autorange: true,
-    },
-    yaxis: {
-      gridcolor: 'rgba(75, 85, 99, 0.2)',
-      linecolor: 'rgba(75, 85, 99, 0.5)',
-      tickcolor: 'rgba(75, 85, 99, 0.5)',
-      showgrid: true,
-      tickformat: '.2f',
-      autorange: true,
-      // Add some padding for better visualization
-      range: chartData.length > 0 ? [
-        Math.min(...chartData.map(d => d.low)) * 0.98,
-        Math.max(...chartData.map(d => d.high)) * 1.02
-      ] : undefined,
-    },
-    shapes: patternShapes,
-    annotations: patternAnnotations,
-    showlegend: false,
-    hovermode: 'x unified',
-    // Improve candlestick rendering
-    bargap: 0.1, // Space between candlesticks as fraction of bar width
-    bargroupgap: 0.0, // Space between groups
+  // Generate fallback pattern annotation when coordinates are missing
+  const generateFallbackPatternAnnotation = (pattern: any, data: any[]) => {
+    if (data.length === 0) return [];
+
+    const direction = pattern.direction;
+    const color = direction === 'bullish' ? '#10B981' : direction === 'bearish' ? '#EF4444' : '#F59E0B';
+    const latestPoint = data[data.length - 1];
+    
+    if (!latestPoint) return [];
+
+    return [{
+      x: latestPoint.x,
+      y: latestPoint.high * 1.05,
+      text: `📍 ${pattern.name}<br>${direction} ${pattern.confidence}%`,
+      showarrow: true,
+      arrowhead: direction === 'bullish' ? 2 : 3,
+      arrowcolor: color,
+      font: { color: color, size: 11 },
+      bgcolor: 'rgba(0,0,0,0.8)',
+      bordercolor: color,
+      borderwidth: 1,
+      xanchor: 'center'
+    }];
   };
+
+  // Create plotly layout with improved candlestick rendering and conditional volume subplot
+  const plotlyLayout: Partial<Layout> = useMemo(() => {
+    const layout: Partial<Layout> = {
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      font: { color: '#e5e7eb', family: 'Inter, sans-serif' },
+      margin: { l: 60, r: 80, t: 20, b: 60 },
+      xaxis: {
+        type: 'date',
+        gridcolor: 'rgba(75, 85, 99, 0.2)',
+        linecolor: 'rgba(75, 85, 99, 0.5)',
+        tickcolor: 'rgba(75, 85, 99, 0.5)',
+        showgrid: true,
+        rangeslider: { visible: false },
+        // Improve candlestick spacing based on timeframe
+        autorange: true,
+      },
+      // Primary y-axis for price data - adjust domain based on volume visibility
+      yaxis: {
+        domain: showVolume ? [0.27, 1] : [0, 1], // Full height when volume is hidden
+        gridcolor: 'rgba(75, 85, 99, 0.2)',
+        linecolor: 'rgba(75, 85, 99, 0.5)',
+        tickcolor: 'rgba(75, 85, 99, 0.5)',
+        showgrid: true,
+        tickformat: '.2f',
+        autorange: true,
+        side: 'left',
+        title: {
+          text: 'Price',
+          font: { color: '#e5e7eb', size: 12 }
+        },
+        // Add some padding for better visualization
+        range: chartData.length > 0 ? [
+          Math.min(...chartData.map(d => d.low)) * 0.98,
+          Math.max(...chartData.map(d => d.high)) * 1.02
+        ] : undefined,
+      },
+      shapes: patternShapes,
+      annotations: patternAnnotations,
+      showlegend: false,
+      hovermode: 'x unified',
+      // Improve candlestick rendering
+      bargap: 0.1, // Space between candlesticks as fraction of bar width
+      bargroupgap: 0.0, // Space between groups
+    };
+
+    // Add volume y-axis only if volume is shown
+    if (showVolume) {
+      layout.yaxis2 = {
+        domain: [0, 0.22], // Takes up 22% of the chart height (bottom portion)
+        gridcolor: 'rgba(75, 85, 99, 0.1)',
+        linecolor: 'rgba(75, 85, 99, 0.3)',
+        tickcolor: 'rgba(75, 85, 99, 0.3)',
+        showgrid: false,
+        tickformat: '.2s', // Scientific notation for large volume numbers
+        autorange: true,
+        side: 'left',
+        title: {
+          text: 'Volume',
+          font: { color: '#e5e7eb', size: 10 }
+        },
+        overlaying: 'y',
+        anchor: 'x',
+        // Add some padding for better visualization
+        rangemode: 'tozero'
+      };
+    }
+
+    return layout;
+  }, [chartData, patternShapes, patternAnnotations, showVolume]);
   
   // Plotly config
   const plotlyConfig: Partial<Config> = {
     displayModeBar: true,
     displaylogo: false,
-    modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'autoScale2d'],
+    modeBarButtonsToRemove: ['lasso2d', 'select2d'], // Keep pan2d and autoScale2d for functionality
     responsive: true,
   };
   
   const renderChart = () => (
     <Plot
+      ref={plotRef}
       data={plotlyData}
       layout={plotlyLayout}
       config={plotlyConfig}
-      style={{ width: '100%', height: '450px' }}
+      style={{ width: '100%', height: '550px' }}
       useResizeHandler={true}
+      onRelayout={handleChartUpdate}
     />
   );
 
   return (
     <div className="w-full space-y-4">
       {/* Market Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-background/30 backdrop-blur-sm border border-border/50 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
             <TrendingUp className={`h-4 w-4 ${priceStats?.change >= 0 ? 'text-green-400' : 'text-red-400'}`} />
@@ -925,7 +1327,7 @@ const ChartDisplay = ({
           <div className="text-lg font-semibold">
             ${priceStats?.high24h?.toLocaleString() || 'Loading...'}
           </div>
-          <div className="text-xs text-muted-foreground">{timeframe === '1d' ? '30d' : timeframe === '1w' ? '52w' : timeframe === '1m' ? '12m' : '24h'}</div>
+          <div className="text-xs text-muted-foreground">{timeframe === '1d' ? '30d' : timeframe === '4h' ? '7d' : '24h'}</div>
         </div>
         <div className="bg-background/30 backdrop-blur-sm border border-border/50 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
@@ -935,29 +1337,31 @@ const ChartDisplay = ({
           <div className="text-lg font-semibold">
             ${priceStats?.low24h?.toLocaleString() || 'Loading...'}
           </div>
-          <div className="text-xs text-muted-foreground">{timeframe === '1d' ? '30d' : timeframe === '1w' ? '52w' : timeframe === '1m' ? '12m' : '24h'}</div>
+          <div className="text-xs text-muted-foreground">{timeframe === '1d' ? '30d' : timeframe === '4h' ? '7d' : '24h'}</div>
         </div>
-        {priceStats?.volume24h && (
-          <div className="bg-background/30 backdrop-blur-sm border border-border/50 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Volume2 className="h-4 w-4 text-purple-400" />
-              <span className="text-sm text-muted-foreground">Volume</span>
-            </div>
-            <div className="text-lg font-semibold">
-              ${(priceStats.volume24h / 1e6).toFixed(1)}M
-            </div>
-            <div className="text-xs text-muted-foreground">24h</div>
-          </div>
-        )}
         <div className="bg-background/30 backdrop-blur-sm border border-border/50 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
-            <Clock className="h-4 w-4 text-yellow-400" />
+            <DollarSign className="h-4 w-4 text-blue-500" />
+            <span className="text-sm text-muted-foreground">Market Cap</span>
+          </div>
+          <div className="text-lg font-semibold">
+            {marketInfo?.market_cap ? `$${(marketInfo.market_cap / 1e9).toFixed(2)}B` : 'Loading...'}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {marketInfo?.market_cap_rank ? `Rank #${marketInfo.market_cap_rank}` : ''}
+          </div>
+        </div>
+        <div className="bg-background/30 backdrop-blur-sm border border-border/50 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className={`h-4 w-4 ${loadingPatterns ? 'text-blue-400 animate-spin' : 'text-yellow-400'}`} />
             <span className="text-sm text-muted-foreground">Patterns</span>
           </div>
           <div className="text-lg font-semibold">
-            {patterns.length}
+            {loadingPatterns ? '...' : patterns.length}
           </div>
-          <div className="text-xs text-green-400">Detected</div>
+          <div className={`text-xs ${loadingPatterns ? 'text-blue-400' : 'text-green-400'}`}>
+            {loadingPatterns ? 'Analyzing...' : 'Visualizable'}
+          </div>
         </div>
       </div>
 
@@ -965,39 +1369,51 @@ const ChartDisplay = ({
       <div className="bg-background/30 backdrop-blur-sm border border-border/50 rounded-xl p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div className="flex items-center gap-3">
-            {/* Market info display */}
-            {marketInfo && (
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-1">
-                  <span>Rank:</span>
-                  <span className="text-primary">#{marketInfo.market_cap_rank}</span>
-                </div>
-                {marketInfo.market_cap && (
-                  <div className="flex items-center gap-1">
-                    <span>Market Cap:</span>
-                    <span className="text-primary">${(marketInfo.market_cap / 1e9).toFixed(2)}B</span>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Timeframe selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Timeframe:</span>
+              <Select value={timeframe} onValueChange={onTimeframeChange}>
+                <SelectTrigger className="w-20 bg-background/50 border border-border/50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1h">1H</SelectItem>
+                  <SelectItem value="4h">4H</SelectItem>
+                  <SelectItem value="1d">1D</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          <Tabs value={chartType} onValueChange={setChartType} className="w-auto">
-            <TabsList className="bg-background/50 border border-border/50">
-              <TabsTrigger
-                value="candlestick"
-                className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
-              >
-                Candlestick
-              </TabsTrigger>
-              <TabsTrigger
-                value="line"
-                className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
-              >
-                Line
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex items-center gap-3">
+            <Tabs value={chartType} onValueChange={setChartType} className="w-auto">
+              <TabsList className="bg-background/50 border border-border/50">
+                <TabsTrigger
+                  value="candlestick"
+                  className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
+                >
+                  Candlestick
+                </TabsTrigger>
+                <TabsTrigger
+                  value="line"
+                  className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
+                >
+                  Line
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            
+            {/* Volume Toggle Button */}
+            <Button
+              variant={showVolume ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowVolume(!showVolume)}
+              className="flex items-center gap-2"
+            >
+              {showVolume ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+              Volume
+            </Button>
+          </div>
         </div>
 
         {chartData.length > 0 ? (
@@ -1060,32 +1476,63 @@ const ChartDisplay = ({
             
             {/* Pattern badges - with deduplication */}
             <div className="mb-4 flex flex-wrap gap-2">
-              {(() => {
-                // Remove duplicate patterns by name, keeping the highest confidence
-                const uniquePatterns = patterns.reduce((acc, current) => {
-                  const existing = acc.find(p => p.name === current.name);
-                  if (!existing || current.confidence > existing.confidence) {
-                    return [...acc.filter(p => p.name !== current.name), current];
-                  }
-                  return acc;
-                }, [] as typeof patterns);
-                
-                return uniquePatterns.slice(0, 5).map((pattern, index) => (
-                  <Badge
-                    key={`${pattern.name}-${pattern.confidence}`}
-                    className={`cursor-pointer transition-colors ${
-                      pattern.name === selectedPattern
-                        ? 'bg-primary/30 border-primary text-primary'
-                        : pattern.direction === 'bullish'
-                        ? 'bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30'
-                        : 'bg-red-500/20 border-red-500/30 text-red-400 hover:bg-red-500/30'
-                    }`}
-                    onClick={() => onPatternSelect(pattern.name)}
-                  >
-                    {pattern.name} ({pattern.confidence}%)
-                  </Badge>
-                ));
-              })()}
+              {loadingPatterns ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Clock className="h-4 w-4 animate-spin" />
+                  <span>Scanning patterns in selected timeframe...</span>
+                </div>
+              ) : patterns.length === 0 ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>No visualizable patterns detected in current timeframe. Try zooming to a different range.</span>
+                </div>
+              ) : (
+                (() => {
+                  // Remove duplicate patterns by name, keeping the highest confidence
+                  const uniquePatterns = patterns.reduce((acc, current) => {
+                    const existing = acc.find(p => p.name === current.name);
+                    if (!existing || current.confidence > existing.confidence) {
+                      return [...acc.filter(p => p.name !== current.name), current];
+                    }
+                    return acc;
+                  }, [] as typeof patterns);
+                  
+                  return uniquePatterns.slice(0, 5).map((pattern, index) => {
+                  const getPatternColors = () => {
+                    const isSelected = pattern.name === selectedPattern;
+                    
+                    switch (pattern.direction) {
+                      case 'bullish':
+                        return isSelected 
+                          ? 'bg-green-500/20 border-white text-white ring-2 ring-white/50 hover:bg-green-500/30 hover:ring-white/70'
+                          : 'bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30';
+                      case 'bearish':
+                        return isSelected
+                          ? 'bg-red-500/20 border-white text-white ring-2 ring-white/50 hover:bg-red-500/30 hover:ring-white/70'
+                          : 'bg-red-500/20 border-red-500/30 text-red-400 hover:bg-red-500/30';
+                      case 'continuation':
+                      case 'neutral':
+                        return isSelected
+                          ? 'bg-white/20 border-white text-white ring-2 ring-white/50 hover:bg-white/30 hover:ring-white/70'
+                          : 'bg-white/20 border-white/30 text-white hover:bg-white/30';
+                      default:
+                        return isSelected
+                          ? 'bg-gray-500/20 border-white text-white ring-2 ring-white/50 hover:bg-gray-500/30 hover:ring-white/70'
+                          : 'bg-gray-500/20 border-gray-500/30 text-gray-400 hover:bg-gray-500/30';
+                    }
+                  };
+
+                  return (
+                    <Badge
+                      key={`${pattern.name}-${pattern.confidence}`}
+                      className={`cursor-pointer transition-colors ${getPatternColors()}`}
+                      onClick={() => onPatternSelect(pattern.name)}
+                    >
+                      {pattern.name} ({pattern.confidence}%)
+                    </Badge>
+                  );
+                  });
+                })()
+              )}
             </div>
             
             <div className={`chart-container w-full h-[500px] rounded-xl border p-4 overflow-hidden ${
