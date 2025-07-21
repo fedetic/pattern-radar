@@ -41,7 +41,7 @@ const ChartDisplay = ({
 }: ChartDisplayProps) => {
   const [chartType, setChartType] = useState("candlestick");
   const [zoomRange, setZoomRange] = useState<{start: string, end: string} | null>(null);
-  const [showVolume, setShowVolume] = useState(true);
+  const [showVolume, setShowVolume] = useState(false);
   const plotRef = useRef<any>(null);
 
   // Enhanced pattern information mapping
@@ -1438,62 +1438,6 @@ const ChartDisplay = ({
 
         {chartData.length > 0 ? (
           <div className="w-full">
-            {/* Selected pattern info */}
-            {selectedPatternData && (
-              <div className="mb-4 p-6 bg-primary/10 border border-primary/20 rounded-lg relative z-10">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">🎯</span>
-                  <span className="font-semibold text-primary text-lg">{selectedPatternData.name}</span>
-                  <Badge variant="outline" className={`${
-                    selectedPatternData.direction === 'bullish' ? 'text-green-400 border-green-400' : 
-                    selectedPatternData.direction === 'bearish' ? 'text-red-400 border-red-400' : 
-                    'text-yellow-400 border-yellow-400'
-                  }`}>
-                    {selectedPatternData.direction} {selectedPatternData.confidence}%
-                  </Badge>
-                </div>
-                
-                {/* Enhanced pattern information */}
-                {(() => {
-                  const patternInfo = getPatternInfo(selectedPatternData.name, selectedPatternData.direction);
-                  return (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <h4 className="font-semibold text-sm text-primary/90 flex items-center gap-1">
-                            <span>📖</span> Pattern Meaning
-                          </h4>
-                          <p className="text-sm text-muted-foreground">{patternInfo.meaning}</p>
-                        </div>
-                        <div className="space-y-2">
-                          <h4 className="font-semibold text-sm text-primary/90 flex items-center gap-1">
-                            <span>⚡</span> Market Significance
-                          </h4>
-                          <p className="text-sm text-muted-foreground">{patternInfo.significance}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <h4 className="font-semibold text-sm text-primary/90 flex items-center gap-1">
-                            <span>💡</span> Trading Strategy
-                          </h4>
-                          <p className="text-sm text-muted-foreground">{patternInfo.trading}</p>
-                        </div>
-                        <div className="space-y-2">
-                          <h4 className="font-semibold text-sm text-primary/90 flex items-center gap-1">
-                            <span>🎯</span> Reliability
-                          </h4>
-                          <p className="text-sm text-muted-foreground">{patternInfo.reliability}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-                
-              </div>
-            )}
-            
             {/* Pattern badges - with deduplication */}
             <div className="mb-4 flex flex-wrap gap-2">
               {loadingPatterns ? (
@@ -1523,21 +1467,21 @@ const ChartDisplay = ({
                     switch (pattern.direction) {
                       case 'bullish':
                         return isSelected 
-                          ? 'bg-green-500/20 border-white text-white ring-2 ring-white/50 hover:bg-green-500/30 hover:ring-white/70'
-                          : 'bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30';
+                          ? 'bg-green-500/20 border-white ring-2 ring-white/50 hover:bg-green-500/30 hover:ring-white/70'
+                          : 'bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30 hover:border-white';
                       case 'bearish':
                         return isSelected
-                          ? 'bg-red-500/20 border-white text-white ring-2 ring-white/50 hover:bg-red-500/30 hover:ring-white/70'
-                          : 'bg-red-500/20 border-red-500/30 text-red-400 hover:bg-red-500/30';
+                          ? 'bg-red-500/20 border-white ring-2 ring-white/50 hover:bg-red-500/30 hover:ring-white/70'
+                          : 'bg-red-500/20 border-red-500/30 text-red-400 hover:bg-red-500/30 hover:border-white';
                       case 'continuation':
                       case 'neutral':
                         return isSelected
-                          ? 'bg-white/20 border-white text-white ring-2 ring-white/50 hover:bg-white/30 hover:ring-white/70'
-                          : 'bg-white/20 border-white/30 text-white hover:bg-white/30';
+                          ? 'bg-white/20 border-white ring-2 ring-white/50 hover:bg-white/30 hover:ring-white/70'
+                          : 'bg-white/20 border-white/30 text-white hover:bg-white/30 hover:border-white';
                       default:
                         return isSelected
-                          ? 'bg-gray-500/20 border-white text-white ring-2 ring-white/50 hover:bg-gray-500/30 hover:ring-white/70'
-                          : 'bg-gray-500/20 border-gray-500/30 text-gray-400 hover:bg-gray-500/30';
+                          ? 'bg-gray-500/20 border-white ring-2 ring-white/50 hover:bg-gray-500/30 hover:ring-white/70'
+                          : 'bg-gray-500/20 border-gray-500/30 text-gray-400 hover:bg-gray-500/30 hover:border-white';
                     }
                   };
 
@@ -1562,6 +1506,59 @@ const ChartDisplay = ({
             }`}>
               {renderChart()}
             </div>
+
+            {/* Selected pattern info (moved below chart) */}
+            {selectedPatternData && (
+              <div className="mt-4 p-6 bg-primary/10 border border-primary/20 rounded-lg relative z-10">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">🎯</span>
+                  <span className="font-semibold text-primary text-lg">{selectedPatternData.name}</span>
+                  <Badge variant="outline" className={
+                    selectedPatternData.direction === 'bullish' ? 'bg-green-500/20 text-green-400 border-green-400' :
+                    selectedPatternData.direction === 'bearish' ? 'bg-red-500/20 text-red-400 border-red-400' :
+                    'bg-yellow-500/20 text-yellow-400 border-yellow-400'
+                  }>
+                    {selectedPatternData.direction} {selectedPatternData.confidence}%
+                  </Badge>
+                </div>
+                {/* Enhanced pattern information */}
+                {(() => {
+                  const patternInfo = getPatternInfo(selectedPatternData.name, selectedPatternData.direction);
+                  return (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <h4 className="font-semibold text-sm text-primary/90 flex items-center gap-1">
+                            <span>📖</span> Pattern Meaning
+                          </h4>
+                          <p className="text-sm text-muted-foreground">{patternInfo.meaning}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <h4 className="font-semibold text-sm text-primary/90 flex items-center gap-1">
+                            <span>⚡</span> Market Significance
+                          </h4>
+                          <p className="text-sm text-muted-foreground">{patternInfo.significance}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <h4 className="font-semibold text-sm text-primary/90 flex items-center gap-1">
+                            <span>💡</span> Trading Strategy
+                          </h4>
+                          <p className="text-sm text-muted-foreground">{patternInfo.trading}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <h4 className="font-semibold text-sm text-primary/90 flex items-center gap-1">
+                            <span>🎯</span> Reliability
+                          </h4>
+                          <p className="text-sm text-muted-foreground">{patternInfo.reliability}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
         ) : (
           <div className="w-full h-[500px] rounded-xl border border-border/30 bg-gradient-to-br from-background/20 to-background/5 flex items-center justify-center">
