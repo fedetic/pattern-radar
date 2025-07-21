@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { TrendingUp, Activity, BarChart3, Zap } from "lucide-react";
 import ChartDisplay from "./ChartDisplay";
 import PatternAnalysisPanel from "./PatternAnalysisPanel";
+import { filterVisualizablePatterns } from "../utils/patternUtils";
 
 const timeframes = [
   { value: "1h", label: "1H" },
@@ -86,48 +87,64 @@ const Home = () => {
   }, [selectedPair, selectedTimeframe]);
 
 
-  // Validate pattern for visualization capability
-  const isPatternVisualizable = (pattern: any) => {
-    if (!pattern) return false;
+  // Filter patterns to only include visualizable ones using unified utility
+  const visualizablePatterns = useMemo(() => {
+    console.log('Filtering patterns in home.tsx:', {
+      totalPatterns: patterns.length,
+      patternNames: patterns.map(p => p.name)
+    });
     
-    const coords = pattern.coordinates;
-    if (!coords) {
-      // Patterns without coordinates can use fallback visualization
-      // They're visualizable if they have basic required fields
-      return pattern.name && pattern.direction && pattern.category;
+    // Special logging for harmonic patterns
+    const harmonicPatterns = patterns.filter(p => p.category === 'Harmonic' || 
+      (p.coordinates && p.coordinates.type === 'harmonic_pattern'));
+    
+    if (harmonicPatterns.length > 0) {
+      console.log('🎵 HARMONIC PATTERNS DEBUG - Raw patterns:', harmonicPatterns.map(p => ({
+        name: p.name,
+        category: p.category,
+        hasCoordinates: !!p.coordinates,
+        coordinateType: p.coordinates?.type,
+        pointsCount: p.coordinates?.points?.length,
+        points: p.coordinates?.points?.map(pt => ({
+          hasTimestamp: !!pt.timestamp,
+          hasPrice: pt.price !== undefined,
+          hasLabel: !!pt.label
+        }))
+      })));
     }
     
-    const coordType = coords.type;
+    const filtered = filterVisualizablePatterns(patterns);
     
-    // Check coordinate type requirements
-    switch (coordType) {
-      case 'pattern_range':
-        return coords.start_time && coords.end_time && 
-               coords.pattern_high !== undefined && coords.pattern_low !== undefined;
-      
-      case 'volume_pattern':
-        return coords.timestamp && coords.volume !== undefined;
-      
-      case 'statistical_pattern':
-        return coords.timestamp && coords.price !== undefined;
-      
-      case 'horizontal_line':
-        return coords.level !== undefined && coords.start_time && coords.end_time;
-      
-      case 'harmonic_pattern':
-        return coords.points && Array.isArray(coords.points) && coords.points.length >= 2;
-      
-      default:
-        // Unknown coordinate type - allow fallback visualization if basic fields exist
-        return pattern.name && pattern.direction && pattern.category;
+    const filteredHarmonics = filtered.filter(p => p.category === 'Harmonic' || 
+      (p.coordinates && p.coordinates.type === 'harmonic_pattern'));
+    
+    console.log('Filtered patterns in home.tsx:', {
+      visualizableCount: filtered.length,
+      visualizableNames: filtered.map(p => p.name),
+      harmonicCountBefore: harmonicPatterns.length,
+      harmonicCountAfter: filteredHarmonics.length,
+      filteredHarmonicNames: filteredHarmonics.map(p => p.name)
+    });
+    
+    if (harmonicPatterns.length > filteredHarmonics.length) {
+      console.warn('🎵 HARMONIC PATTERNS FILTERED OUT:', 
+        harmonicPatterns.filter(p => !filteredHarmonics.find(f => f.name === p.name))
+          .map(p => ({ name: p.name, reason: 'Failed isPatternVisualizable check' }))
+      );
     }
-  };
-
-  // Filter patterns to only include visualizable ones
-  const visualizablePatterns = patterns.filter(isPatternVisualizable);
+    
+    return filtered;
+  }, [patterns]);
 
   const handlePatternSelect = (patternId: string) => {
-    setSelectedPattern(patternId === selectedPattern ? null : patternId);
+    const newSelection = patternId === selectedPattern ? null : patternId;
+    console.log('🎯 PATTERN SELECTION CHANGE:', {
+      from: selectedPattern,
+      to: newSelection,
+      patternId,
+      action: newSelection ? 'select' : 'deselect'
+    });
+    setSelectedPattern(newSelection);
   };
 
   const handleZoomPatternUpdate = async (startTime: string, endTime: string) => {
@@ -289,14 +306,24 @@ const Home = () => {
               ) : (
                 <PatternAnalysisPanel
                   patterns={visualizablePatterns.map(pattern => ({
-                    id: pattern.name,
+                    id: pattern.name, // Use pattern.name as ID for consistency
                     name: pattern.name,
-                    category: pattern.category,
+                    category: pattern.category as "Chart" | "Candle" | "Volume-Based" | "Price Action" | "Harmonic" | "Statistical",
                     strength: pattern.confidence,
                     description: pattern.description,
                     timeframe: selectedTimeframe
                   }))}
-                  onPatternSelect={handlePatternSelect}
+                  onPatternSelect={(patternId) => {
+                    // Ensure patternId matches the pattern name for chart lookup
+                    const newSelection = patternId === selectedPattern ? null : patternId;
+                    console.log('📋 PATTERN PANEL SELECTION:', {
+                      patternId,
+                      from: selectedPattern,
+                      to: newSelection,
+                      action: newSelection ? 'select' : 'deselect'
+                    });
+                    setSelectedPattern(newSelection);
+                  }}
                   selectedPatternId={selectedPattern}
                 />
               )}

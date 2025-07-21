@@ -3,7 +3,7 @@ import ChartContainer from "./chart/ChartContainer";
 import ChartControls from "./chart/ChartControls";
 import PatternInfo from "./chart/PatternInfo";
 import PatternBadges from "./chart/PatternBadges";
-import MarketStats from "../ui/MarketStats";
+import MarketStats from "./ui/MarketStats";
 import { processMarketData, calculatePriceStats } from "../utils/chartUtils";
 import { filterVisualizablePatterns } from "../utils/patternUtils";
 import { useChartState } from "../hooks/useChartState";
@@ -54,8 +54,28 @@ const ChartDisplay = ({
   
   // Get selected pattern data
   const selectedPatternData = useMemo(() => {
-    if (!selectedPattern || !visualizablePatterns.length) return null;
-    return visualizablePatterns.find(p => p.name === selectedPattern);
+    if (!selectedPattern || !visualizablePatterns.length) {
+      console.log('Pattern lookup failed (refactored):', { selectedPattern, patternsCount: visualizablePatterns?.length || 0 });
+      return null;
+    }
+    
+    const foundPattern = visualizablePatterns.find(p => p.name === selectedPattern);
+    
+    if (!foundPattern) {
+      console.warn('Selected pattern not found in visualizable patterns (refactored):', {
+        selectedPattern,
+        availablePatterns: visualizablePatterns.map(p => p.name),
+        totalPatterns: visualizablePatterns.length
+      });
+    } else {
+      console.log('Pattern found for visualization (refactored):', {
+        name: foundPattern.name,
+        hasCoordinates: !!foundPattern.coordinates,
+        coordinateType: foundPattern.coordinates?.type
+      });
+    }
+    
+    return foundPattern;
   }, [visualizablePatterns, selectedPattern]);
 
   // Cleanup timer on unmount

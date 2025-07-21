@@ -98,7 +98,7 @@ export const isPatternVisualizable = (pattern: Pattern): boolean => {
   
   const coords = pattern.coordinates;
   if (!coords) {
-    return pattern.name && pattern.direction && pattern.category;
+    return !!(pattern.name && pattern.direction && pattern.category);
   }
   
   const coordType = coords.type;
@@ -118,10 +118,95 @@ export const isPatternVisualizable = (pattern: Pattern): boolean => {
       return coords.level !== undefined && coords.start_time && coords.end_time;
     
     case 'harmonic_pattern':
-      return coords.points && Array.isArray(coords.points) && coords.points.length >= 2;
+      // RELAXED validation for harmonic patterns - be more tolerant
+      const hasValidStructure = coords.points && Array.isArray(coords.points) && coords.points.length >= 3;
+      
+      let mostPointsValid = false;
+      let validPointCount = 0;
+      
+      if (hasValidStructure) {
+        coords.points.forEach(point => {
+          if (!point) return;
+          
+          // More lenient timestamp validation
+          const hasTimestamp = !!point.timestamp;
+          let isValidTimestamp = false;
+          if (hasTimestamp) {
+            try {
+              const date = new Date(point.timestamp);
+              isValidTimestamp = !isNaN(date.getTime()) && date.getTime() > 0;
+            } catch {
+              isValidTimestamp = false;
+            }
+          }
+          
+          // More lenient price validation  
+          const hasPrice = point.price !== undefined && point.price !== null;
+          const isValidPrice = hasPrice && (typeof point.price === 'number') && !isNaN(point.price);
+          
+          if (hasTimestamp && isValidTimestamp && hasPrice && isValidPrice) {
+            validPointCount++;
+          }
+        });
+        
+        // Allow pattern if at least 75% of points are valid (instead of 100%)
+        mostPointsValid = validPointCount >= Math.ceil(coords.points.length * 0.75);
+      }
+      
+      const isValid = hasValidStructure && mostPointsValid;
+      
+      // Debug logging for harmonic pattern validation
+      console.log('🎵 HARMONIC PATTERN VALIDATION (RELAXED):', {
+        patternName: pattern.name,
+        hasPoints: !!coords.points,
+        isArray: Array.isArray(coords.points),
+        pointsLength: coords.points?.length || 0,
+        hasValidStructure,
+        validPointCount,
+        totalPoints: coords.points?.length || 0,
+        validPercentage: coords.points?.length ? (validPointCount / coords.points.length * 100).toFixed(1) + '%' : '0%',
+        mostPointsValid,
+        isValid,
+        points: coords.points?.map((p, i) => {
+          let timestampValid = false;
+          try {
+            if (p?.timestamp) {
+              const date = new Date(p.timestamp);
+              timestampValid = !isNaN(date.getTime()) && date.getTime() > 0;
+            }
+          } catch {}
+          
+          return {
+            index: i,
+            label: p?.label || `Point${i}`,
+            hasTimestamp: !!p?.timestamp,
+            timestampValid,
+            hasPrice: p?.price !== undefined && p?.price !== null,
+            priceValid: (typeof p?.price === 'number') && !isNaN(p?.price),
+            timestamp: p?.timestamp,
+            price: p?.price,
+            isPointValid: timestampValid && (typeof p?.price === 'number') && !isNaN(p?.price)
+          };
+        }) || 'No points'
+      });
+      
+      if (!isValid && coords.points && Array.isArray(coords.points)) {
+        console.warn('🎵 HARMONIC PATTERN VALIDATION FAILED (RELAXED):', {
+          patternName: pattern.name,
+          reason: !hasValidStructure ? 
+            `Need at least 3 points, got ${coords.points.length}` :
+            `Only ${validPointCount}/${coords.points.length} points are valid (need 75%+)`,
+          validPointCount,
+          totalPoints: coords.points.length,
+          requiredValidPoints: Math.ceil(coords.points.length * 0.75),
+          validPercentage: (validPointCount / coords.points.length * 100).toFixed(1) + '%'
+        });
+      }
+      
+      return isValid;
     
     default:
-      return pattern.name && pattern.direction && pattern.category;
+      return !!(pattern.name && pattern.direction && pattern.category);
   }
 };
 

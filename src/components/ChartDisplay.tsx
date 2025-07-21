@@ -512,8 +512,28 @@ const ChartDisplay = ({
 
   // Get patterns for current selection (patterns are already filtered in Home component)
   const selectedPatternData = useMemo(() => {
-    if (!selectedPattern || !patterns || patterns.length === 0) return null;
-    return patterns.find(p => p.name === selectedPattern);
+    if (!selectedPattern || !patterns || patterns.length === 0) {
+      console.log('Pattern lookup failed:', { selectedPattern, patternsCount: patterns?.length || 0 });
+      return null;
+    }
+    
+    const foundPattern = patterns.find(p => p.name === selectedPattern);
+    
+    if (!foundPattern) {
+      console.warn('Selected pattern not found in available patterns:', {
+        selectedPattern,
+        availablePatterns: patterns.map(p => p.name),
+        totalPatterns: patterns.length
+      });
+    } else {
+      console.log('Pattern found for visualization:', {
+        name: foundPattern.name,
+        hasCoordinates: !!foundPattern.coordinates,
+        coordinateType: foundPattern.coordinates?.type
+      });
+    }
+    
+    return foundPattern;
   }, [patterns, selectedPattern]);
 
   // Process market data for plotly
