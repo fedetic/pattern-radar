@@ -31,6 +31,7 @@ const Home = () => {
   const [marketData, setMarketData] = useState<any[]>([]);
   const [marketInfo, setMarketInfo] = useState<any>(null);
   const [loadingPatterns, setLoadingPatterns] = useState(false);
+  const [showFullHistory, setShowFullHistory] = useState(false);
 
   useEffect(() => {
     setLoadingPairs(true);
@@ -63,7 +64,7 @@ const Home = () => {
     const coinId = selectedPair;
     const days = selectedTimeframe === "1h" ? 7 : selectedTimeframe === "4h" ? 30 : selectedTimeframe === "1d" ? 365 : 365;
 
-    fetch(`http://127.0.0.1:8000/patterns/${coinId}?days=${days}&timeframe=${selectedTimeframe}`)
+    fetch(`http://127.0.0.1:8000/patterns/${coinId}?days=${days}&timeframe=${selectedTimeframe}&full_history=${showFullHistory}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to fetch patterns");
         return res.json();
@@ -84,7 +85,7 @@ const Home = () => {
         setMarketData([]);
         setLoadingPatterns(false);
       });
-  }, [selectedPair, selectedTimeframe]);
+  }, [selectedPair, selectedTimeframe, showFullHistory]);
 
 
   // Filter patterns to only include visualizable ones using unified utility
@@ -159,7 +160,7 @@ const Home = () => {
       const coinId = selectedPair;
       
       // Step 2: Call the filtered patterns endpoint for the new timeframe
-      const url = `http://127.0.0.1:8000/patterns/${coinId}/filtered?start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}&timeframe=${selectedTimeframe}`;
+      const url = `http://127.0.0.1:8000/patterns/${coinId}/filtered?start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}&timeframe=${selectedTimeframe}&full_history=${showFullHistory}`;
       
       const response = await fetch(url);
       
@@ -245,6 +246,12 @@ const Home = () => {
                     </SelectContent>
                   </Select>
                 )}
+                <button
+                  className={`px-3 py-2 rounded border text-sm font-medium transition-colors ${showFullHistory ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border text-muted-foreground hover:bg-muted'}`}
+                  onClick={() => setShowFullHistory((v) => !v)}
+                >
+                  {showFullHistory ? 'Show Recent Only' : 'Show Full History'}
+                </button>
               </div>
             </div>
           </div>
