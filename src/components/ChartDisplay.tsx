@@ -1256,8 +1256,7 @@ const ChartDisplay = ({
     const layout: Partial<Layout> = {
       plot_bgcolor: 'rgba(0,0,0,0)',
       paper_bgcolor: 'rgba(0,0,0,0)',
-      font: { color: '#e5e7eb', family: 'Inter, sans-serif' },
-      margin: { l: 90, r: 80, t: 20, b: 60 },
+      margin: { l: 90, r: 80, t: 20, b: 120 }, // Increased bottom margin to prevent x-axis label cutoff
       xaxis: {
         type: 'date',
         gridcolor: 'rgba(75, 85, 99, 0.2)',
@@ -1266,14 +1265,19 @@ const ChartDisplay = ({
         showgrid: true,
         rangeslider: { visible: false },
         autorange: true,
-        // Ensure x-axis is always anchored to the primary plot area, not volume
-        anchor: 'y',
-        // Ensure x-axis is always visible regardless of volume toggle
+        automargin: true, // Let Plotly automatically adjust margin for label
+        // Ensure x-axis spans full width and is always visible
         domain: [0, 1],
+        // Ensure axis line and ticks are always visible
+        showline: true,
+        showticklabels: true,
+        ticks: 'outside',
+        // Make sure x-axis doesn't disappear by ensuring proper positioning
+        side: 'bottom',
       },
-      // Primary y-axis for price data - adjust domain based on volume visibility
+      // Primary y-axis for price data - always leave space at bottom for x-axis
       yaxis: {
-        domain: showVolume ? [0.27, 1] : [0, 1], // Full height when volume is hidden
+        domain: showVolume ? [0.27, 1] : [0.05, 1], // Always leave bottom space for x-axis
         gridcolor: 'rgba(75, 85, 99, 0.2)',
         linecolor: 'rgba(75, 85, 99, 0.5)',
         tickcolor: 'rgba(75, 85, 99, 0.5)',
@@ -1282,7 +1286,7 @@ const ChartDisplay = ({
         autorange: true,
         side: 'left',
         title: {
-          text: 'Price',
+          text: 'Price ($)',
           font: { color: '#e5e7eb', size: 12 }
         },
         // Add some padding for better visualization
@@ -1300,8 +1304,9 @@ const ChartDisplay = ({
       bargroupgap: 0.0, // Space between groups
     };
 
-    // Add volume y-axis only if volume is shown
+    // Always create a bottom subplot to anchor x-axis
     if (showVolume) {
+      // Volume is visible - create volume subplot
       layout.yaxis2 = {
         domain: [0, 0.22], // Takes up 22% of the chart height (bottom portion)
         gridcolor: 'rgba(75, 85, 99, 0.1)',
@@ -1312,15 +1317,27 @@ const ChartDisplay = ({
         autorange: true,
         side: 'left',
         title: {
-          text: 'Volume',
+          text: 'Volume ($)',
           font: { color: '#e5e7eb', size: 10 }
         },
-        // Don't overlay - create separate subplot
+        // Anchor x-axis to this subplot
         anchor: 'x',
-        // Add some padding for better visualization
         rangemode: 'tozero',
-        // Ensure volume axis doesn't interfere with x-axis positioning
-        position: 0
+      };
+    } else {
+      // Volume is hidden - create invisible bottom anchor for x-axis
+      layout.yaxis2 = {
+        domain: [0, 0.05], // Minimal bottom space (5%)
+        showgrid: false,
+        showline: false,
+        showticklabels: false,
+        showspikes: false,
+        // Invisible but provides anchor for x-axis
+        visible: false,
+        // Anchor x-axis to this invisible subplot
+        anchor: 'x',
+        rangemode: 'tozero',
+        range: [0, 1], // Dummy range
       };
     }
 
