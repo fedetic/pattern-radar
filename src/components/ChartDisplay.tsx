@@ -1232,13 +1232,32 @@ const ChartDisplay = ({
     }];
   };
 
+  // Function to determine appropriate tick format based on price range
+  const getPriceTickFormat = (minPrice: number, maxPrice: number) => {
+    const avgPrice = (minPrice + maxPrice) / 2;
+    if (avgPrice >= 1.0) {
+      return '.0f'; // No decimals for prices >= 1.0
+    } else if (avgPrice >= 0.1) {
+      return '.2f'; // 2 decimals for prices 0.1-1.0
+    } else if (avgPrice >= 0.01) {
+      return '.3f'; // 3 decimals for prices 0.01-0.1
+    } else {
+      return '.6f'; // 6 decimals for very small prices
+    }
+  };
+
   // Create plotly layout with improved candlestick rendering and conditional volume subplot
   const plotlyLayout: Partial<Layout> = useMemo(() => {
+    // Calculate appropriate price tick format
+    const minPrice = chartData.length > 0 ? Math.min(...chartData.map(d => d.low)) : 0;
+    const maxPrice = chartData.length > 0 ? Math.max(...chartData.map(d => d.high)) : 1;
+    const priceTickFormat = getPriceTickFormat(minPrice, maxPrice);
+
     const layout: Partial<Layout> = {
       plot_bgcolor: 'rgba(0,0,0,0)',
       paper_bgcolor: 'rgba(0,0,0,0)',
       font: { color: '#e5e7eb', family: 'Inter, sans-serif' },
-      margin: { l: 60, r: 80, t: 20, b: 60 },
+      margin: { l: 90, r: 80, t: 20, b: 60 },
       xaxis: {
         type: 'date',
         gridcolor: 'rgba(75, 85, 99, 0.2)',
@@ -1246,8 +1265,11 @@ const ChartDisplay = ({
         tickcolor: 'rgba(75, 85, 99, 0.5)',
         showgrid: true,
         rangeslider: { visible: false },
-        // Improve candlestick spacing based on timeframe
         autorange: true,
+        // Ensure x-axis is always anchored to the primary plot area, not volume
+        anchor: 'y',
+        // Ensure x-axis is always visible regardless of volume toggle
+        domain: [0, 1],
       },
       // Primary y-axis for price data - adjust domain based on volume visibility
       yaxis: {
@@ -1256,7 +1278,7 @@ const ChartDisplay = ({
         linecolor: 'rgba(75, 85, 99, 0.5)',
         tickcolor: 'rgba(75, 85, 99, 0.5)',
         showgrid: true,
-        tickformat: '.2f',
+        tickformat: priceTickFormat, // Dynamic formatting based on price range
         autorange: true,
         side: 'left',
         title: {
@@ -1293,10 +1315,12 @@ const ChartDisplay = ({
           text: 'Volume',
           font: { color: '#e5e7eb', size: 10 }
         },
-        overlaying: 'y',
+        // Don't overlay - create separate subplot
         anchor: 'x',
         // Add some padding for better visualization
-        rangemode: 'tozero'
+        rangemode: 'tozero',
+        // Ensure volume axis doesn't interfere with x-axis positioning
+        position: 0
       };
     }
 

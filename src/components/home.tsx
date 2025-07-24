@@ -9,10 +9,13 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { TrendingUp, Activity, BarChart3, Zap } from "lucide-react";
 import ChartDisplay from "./ChartDisplay";
 import PatternAnalysisPanel from "./PatternAnalysisPanel";
+import MLPredictionPanel from "./MLPredictionPanel";
 import { filterVisualizablePatterns } from "../utils/patternUtils";
+import useMLPredictions from "../hooks/useMLPredictions";
 
 const timeframes = [
   { value: "1h", label: "1H" },
@@ -32,6 +35,15 @@ const Home = () => {
   const [marketInfo, setMarketInfo] = useState<any>(null);
   const [loadingPatterns, setLoadingPatterns] = useState(false);
   const [showFullHistory, setShowFullHistory] = useState(false);
+
+  // ML Predictions hook
+  const { 
+    prediction: mlPrediction, 
+    recommendation: tradingRecommendation, 
+    loading: mlLoading, 
+    error: mlError,
+    refetch: refetchML 
+  } = useMLPredictions(selectedPair, 30);
 
   useEffect(() => {
     setLoadingPairs(true);
@@ -62,7 +74,13 @@ const Home = () => {
 
     setLoadingPatterns(true);
     const coinId = selectedPair;
-    const days = selectedTimeframe === "1h" ? 7 : selectedTimeframe === "4h" ? 30 : selectedTimeframe === "1d" ? 365 : 365;
+    // Calculate days based on toggle state
+    // showFullHistory = true means toggle is OFF (analyze full history) - use more days
+    // showFullHistory = false means toggle is ON (recent data only) - use fewer days
+    const days = showFullHistory 
+      ? (selectedTimeframe === "1h" ? 30 : selectedTimeframe === "4h" ? 30 : selectedTimeframe === "1d" ? 365 : 365)  // More days
+      : (selectedTimeframe === "1h" ? 7 : selectedTimeframe === "4h" ? 90 : selectedTimeframe === "1d" ? 90 : 90);   // Fewer days
+    
 
     fetch(`http://127.0.0.1:8000/patterns/${coinId}?days=${days}&timeframe=${selectedTimeframe}&full_history=${showFullHistory}`)
       .then((res) => {
@@ -90,61 +108,22 @@ const Home = () => {
 
   // Filter patterns to only include visualizable ones using unified utility
   const visualizablePatterns = useMemo(() => {
-    console.log('Filtering patterns in home.tsx:', {
-      totalPatterns: patterns.length,
-      patternNames: patterns.map(p => p.name)
-    });
     
     // Special logging for harmonic patterns
     const harmonicPatterns = patterns.filter(p => p.category === 'Harmonic' || 
       (p.coordinates && p.coordinates.type === 'harmonic_pattern'));
     
-    if (harmonicPatterns.length > 0) {
-      console.log('🎵 HARMONIC PATTERNS DEBUG - Raw patterns:', harmonicPatterns.map(p => ({
-        name: p.name,
-        category: p.category,
-        hasCoordinates: !!p.coordinates,
-        coordinateType: p.coordinates?.type,
-        pointsCount: p.coordinates?.points?.length,
-        points: p.coordinates?.points?.map(pt => ({
-          hasTimestamp: !!pt.timestamp,
-          hasPrice: pt.price !== undefined,
-          hasLabel: !!pt.label
-        }))
-      })));
-    }
     
     const filtered = filterVisualizablePatterns(patterns);
     
     const filteredHarmonics = filtered.filter(p => p.category === 'Harmonic' || 
       (p.coordinates && p.coordinates.type === 'harmonic_pattern'));
     
-    console.log('Filtered patterns in home.tsx:', {
-      visualizableCount: filtered.length,
-      visualizableNames: filtered.map(p => p.name),
-      harmonicCountBefore: harmonicPatterns.length,
-      harmonicCountAfter: filteredHarmonics.length,
-      filteredHarmonicNames: filteredHarmonics.map(p => p.name)
-    });
-    
-    if (harmonicPatterns.length > filteredHarmonics.length) {
-      console.warn('🎵 HARMONIC PATTERNS FILTERED OUT:', 
-        harmonicPatterns.filter(p => !filteredHarmonics.find(f => f.name === p.name))
-          .map(p => ({ name: p.name, reason: 'Failed isPatternVisualizable check' }))
-      );
-    }
-    
     return filtered;
   }, [patterns]);
 
   const handlePatternSelect = (patternId: string) => {
     const newSelection = patternId === selectedPattern ? null : patternId;
-    console.log('🎯 PATTERN SELECTION CHANGE:', {
-      from: selectedPattern,
-      to: newSelection,
-      patternId,
-      action: newSelection ? 'select' : 'deselect'
-    });
     setSelectedPattern(newSelection);
   };
 
@@ -177,7 +156,6 @@ const Home = () => {
         }
         
         // Log the pattern reset and new scan for debugging
-        console.log(`Pattern scan completed for timeframe ${startTime} to ${endTime}: found ${newPatterns.length} patterns`);
       } else {
         console.warn('Failed to fetch filtered patterns:', response.status);
         // Keep patterns empty on error to show that scan failed
@@ -246,21 +224,28 @@ const Home = () => {
                     </SelectContent>
                   </Select>
                 )}
-                <button
-                  className={`px-3 py-2 rounded border text-sm font-medium transition-colors ${showFullHistory ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border text-muted-foreground hover:bg-muted'}`}
-                  onClick={() => setShowFullHistory((v) => !v)}
-                >
-                  {showFullHistory ? 'Show Recent Only' : 'Show Full History'}
-                </button>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    checked={!showFullHistory}
+                    onCheckedChange={(checked) => setShowFullHistory(!checked)}
+                    id="recent-data-toggle"
+                  />
+                  <label
+                    htmlFor="recent-data-toggle"
+                    className="text-sm font-medium cursor-pointer"
+                  >
+                    Analyze Recent Data Only
+                  </label>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         {/* Main Content */}
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          {/* Chart Section - Takes up 3/4 of the space on xl screens */}
-          <div className="xl:col-span-3 space-y-6">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          {/* Chart Section - Takes up 2/3 of the space on xl screens */}
+          <div className="xl:col-span-2 space-y-6">
             <div className="trading-card p-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <div className="flex items-center gap-3">
@@ -292,9 +277,33 @@ const Home = () => {
             </div>
           </div>
 
-          {/* Pattern Analysis Panel - Takes up 1/4 of the space on xl screens */}
-          <div className="xl:col-span-1">
-            <div className="trading-card p-6 h-full">
+          {/* Analysis Panels - Takes up 1/3 of the space on xl screens */}
+          <div className="xl:col-span-1 space-y-6">
+            {/* ML Predictions Panel */}
+            <div className="trading-card p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-primary/20 rounded-lg">
+                  <Zap className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold">AI Insights</h2>
+                  <p className="text-sm text-muted-foreground">
+                    ML predictions & recommendations
+                  </p>
+                </div>
+              </div>
+              <MLPredictionPanel
+                coinId={selectedPair}
+                prediction={mlPrediction}
+                recommendation={tradingRecommendation}
+                loading={mlLoading}
+                error={mlError}
+                onRefresh={refetchML}
+              />
+            </div>
+
+            {/* Pattern Analysis Panel */}
+            <div className="trading-card p-6">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-primary/20 rounded-lg">
                   <Activity className="h-5 w-5 text-primary" />
@@ -323,12 +332,6 @@ const Home = () => {
                   onPatternSelect={(patternId) => {
                     // Ensure patternId matches the pattern name for chart lookup
                     const newSelection = patternId === selectedPattern ? null : patternId;
-                    console.log('📋 PATTERN PANEL SELECTION:', {
-                      patternId,
-                      from: selectedPattern,
-                      to: newSelection,
-                      action: newSelection ? 'select' : 'deselect'
-                    });
                     setSelectedPattern(newSelection);
                   }}
                   selectedPatternId={selectedPattern}
