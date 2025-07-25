@@ -17,16 +17,18 @@ import MLPredictionPanel from "./MLPredictionPanel";
 import { filterVisualizablePatterns } from "../utils/patternUtils";
 import useMLPredictions from "../hooks/useMLPredictions";
 
+// Timeframes configuration - easily extendible for future use
 const timeframes = [
-  { value: "1h", label: "1H" },
-  { value: "4h", label: "4H" },
   { value: "1d", label: "1D" },
+  // { value: "1h", label: "1H" }, // Available for future implementation
+  // { value: "4h", label: "4H" }, // Available for future implementation
 ];
 
 const Home = () => {
   const [tradingPairs, setTradingPairs] = useState<{ value: string; label: string; coin_id: string }[]>([]);
   const [selectedPair, setSelectedPair] = useState<string>("");
-  const [selectedTimeframe, setSelectedTimeframe] = useState("1d");
+  // Hardcoded to 1d for now - easily changed to state when re-adding timeframe selection
+  const selectedTimeframe = "1d";
   const [selectedPattern, setSelectedPattern] = useState<string | null>(null);
   const [loadingPairs, setLoadingPairs] = useState(true);
   const [errorPairs, setErrorPairs] = useState<string | null>(null);
@@ -74,12 +76,10 @@ const Home = () => {
 
     setLoadingPatterns(true);
     const coinId = selectedPair;
-    // Calculate days based on toggle state
+    // Calculate days based on toggle state (simplified for 1d timeframe)
     // showFullHistory = true means toggle is OFF (analyze full history) - use more days
     // showFullHistory = false means toggle is ON (recent data only) - use fewer days
-    const days = showFullHistory 
-      ? (selectedTimeframe === "1h" ? 30 : selectedTimeframe === "4h" ? 30 : selectedTimeframe === "1d" ? 365 : 365)  // More days
-      : (selectedTimeframe === "1h" ? 7 : selectedTimeframe === "4h" ? 90 : selectedTimeframe === "1d" ? 90 : 90);   // Fewer days
+    const days = showFullHistory ? 365 : 90; // 1 year vs 3 months for daily data
     
 
     fetch(`http://127.0.0.1:8000/patterns/${coinId}?days=${days}&timeframe=${selectedTimeframe}&full_history=${showFullHistory}`)
@@ -103,7 +103,7 @@ const Home = () => {
         setMarketData([]);
         setLoadingPatterns(false);
       });
-  }, [selectedPair, selectedTimeframe, showFullHistory]);
+  }, [selectedPair, showFullHistory]); // selectedTimeframe removed since it's hardcoded to 1d
 
 
   // Filter patterns to only include visualizable ones using unified utility
@@ -265,7 +265,7 @@ const Home = () => {
               <ChartDisplay
                 tradingPair={selectedPair}
                 timeframe={selectedTimeframe}
-                onTimeframeChange={setSelectedTimeframe}
+                onTimeframeChange={() => {}} // No-op since timeframe is hardcoded to 1d
                 marketData={marketData}
                 marketInfo={marketInfo}
                 patterns={visualizablePatterns}
@@ -327,7 +327,7 @@ const Home = () => {
                     category: pattern.category as "Chart" | "Candle" | "Volume-Based" | "Price Action" | "Harmonic" | "Statistical",
                     strength: pattern.confidence,
                     description: pattern.description,
-                    timeframe: selectedTimeframe
+                    timeframe: "1d" // Hardcoded since we only support 1d now
                   }))}
                   onPatternSelect={(patternId) => {
                     // Ensure patternId matches the pattern name for chart lookup

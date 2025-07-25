@@ -23,7 +23,7 @@ interface Pattern {
     | "Statistical";
   strength: number; // 0-100
   description: string;
-  timeframe: string;
+  // timeframe: string; // Removed since we only support 1d now - can be re-added easily
 }
 
 interface PatternAnalysisPanelProps {
@@ -41,7 +41,7 @@ const PatternAnalysisPanel = ({
       strength: 85,
       description:
         "A bearish reversal pattern that forms after an extended move up.",
-      timeframe: "1d",
+      // timeframe: "1d", // Removed - all patterns now use 1d timeframe
     },
     {
       id: "2",
@@ -49,7 +49,7 @@ const PatternAnalysisPanel = ({
       category: "Candle",
       strength: 72,
       description: "A bullish reversal pattern that forms after a downtrend.",
-      timeframe: "4h",
+      // timeframe: "4h", // Removed - all patterns now use 1d timeframe
     },
     {
       id: "3",
@@ -57,7 +57,7 @@ const PatternAnalysisPanel = ({
       category: "Volume-Based",
       strength: 68,
       description: "Extremely high volume indicating potential reversal.",
-      timeframe: "1d",
+      // timeframe: "1d", // Removed - all patterns now use 1d timeframe
     },
     {
       id: "4",
@@ -65,7 +65,7 @@ const PatternAnalysisPanel = ({
       category: "Price Action",
       strength: 78,
       description: "Price bouncing off a key support level.",
-      timeframe: "1h",
+      // timeframe: "1h", // Removed - all patterns now use 1d timeframe
     },
     {
       id: "5",
@@ -73,7 +73,7 @@ const PatternAnalysisPanel = ({
       category: "Harmonic",
       strength: 65,
       description: "A harmonic pattern that signals potential reversal.",
-      timeframe: "1d",
+      // timeframe: "1d", // Removed - all patterns now use 1d timeframe
     },
     {
       id: "6",
@@ -81,7 +81,7 @@ const PatternAnalysisPanel = ({
       category: "Statistical",
       strength: 70,
       description: "Price likely to return to its mean after deviation.",
-      timeframe: "4h",
+      // timeframe: "4h", // Removed - all patterns now use 1d timeframe
     },
   ],
   onPatternSelect = () => {},
@@ -240,11 +240,12 @@ const PatternCard = ({ pattern, isSelected, onClick }: PatternCardProps) => {
             {pattern.category}
           </div>
         </div>
+        {/* Timeframe badge removed since we only support 1d now */}
         <Badge
           variant="outline"
           className="text-xs bg-background/50 border-border/50"
         >
-          {pattern.timeframe}
+          1D
         </Badge>
       </div>
 

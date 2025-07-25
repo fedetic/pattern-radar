@@ -569,16 +569,8 @@ const ChartDisplay = ({
       const change = previous ? latest.close - previous.close : 0;
       const changePercent = previous ? ((change / previous.close) * 100) : 0;
       
-      // Calculate timeframe-specific ranges
-      const timeframePeriods = {
-        '1h': Math.min(24, chartData.length),
-        '4h': Math.min(24, chartData.length), 
-        '1d': Math.min(30, chartData.length),
-        '1w': Math.min(52, chartData.length),
-        '1m': Math.min(12, chartData.length)
-      };
-      
-      const period = timeframePeriods[timeframe as keyof typeof timeframePeriods] || 24;
+      // For 1d timeframe, use last 30 days for statistics
+      const period = Math.min(30, chartData.length);
       const periodData = chartData.slice(-period);
       
       return {
@@ -636,15 +628,8 @@ const ChartDisplay = ({
       const currentSpan = new Date(endTime).getTime() - new Date(startTime).getTime();
       const oneHour = 3600000; // 1 hour in milliseconds
       
-      // Use more conservative thresholds to avoid interfering with normal zoom operations
-      let threshold = oneHour; // Default 1 hour - much more conservative
-      if (timeframe === '1h') {
-        threshold = Math.max(1800000, currentSpan * 0.2); // 30 minutes or 20% of span, whichever is larger
-      } else if (timeframe === '4h') {
-        threshold = Math.max(3600000, currentSpan * 0.25); // 1 hour or 25% of span
-      } else if (timeframe === '1d') {
-        threshold = Math.max(7200000, currentSpan * 0.3); // 2 hours or 30% of span
-      }
+      // For 1d timeframe, use conservative threshold to avoid interfering with normal zoom operations
+      const threshold = Math.max(7200000, currentSpan * 0.3); // 2 hours or 30% of span, whichever is larger
       
       // Check if zoom range has changed significantly (much more conservative)
       const rangeChanged = !zoomRange || 
@@ -708,10 +693,17 @@ const ChartDisplay = ({
         name: 'OHLC',
         showlegend: false,
         yaxis: 'y1',
-        // Configure candlestick width based on timeframe and data density
+        // Add hover template with thousand separators
+        hovertemplate: '<b>%{x}</b><br>' +
+                      'Open: $%{open:,.2f}<br>' +
+                      'High: $%{high:,.2f}<br>' +
+                      'Low: $%{low:,.2f}<br>' +
+                      'Close: $%{close:,.2f}<br>' +
+                      '<extra></extra>',
+        // Configure candlestick width for daily data
         whiskerwidth: 0.8,
         line: {
-          width: timeframe === '1h' ? 0.5 : timeframe === '4h' ? 0.7 : timeframe === '1d' ? 1.0 : 1.2
+          width: 1.0 // Standard width for 1d timeframe
         }
       });
     } else {
@@ -724,7 +716,11 @@ const ChartDisplay = ({
         line: { color: '#3B82F6', width: 2 },
         name: 'Close Price',
         showlegend: false,
-        yaxis: 'y1'
+        yaxis: 'y1',
+        // Add hover template with thousand separators
+        hovertemplate: '<b>%{x}</b><br>' +
+                      'Close: $%{y:,.2f}<br>' +
+                      '<extra></extra>'
       });
     }
     
@@ -1232,26 +1228,56 @@ const ChartDisplay = ({
     }];
   };
 
-  // Function to determine appropriate tick format based on price range
-  const getPriceTickFormat = (minPrice: number, maxPrice: number) => {
+  // Function to determine appropriate tick format and spacing based on price range
+  const getPriceTickConfig = (minPrice: number, maxPrice: number) => {
+    const priceRange = maxPrice - minPrice;
     const avgPrice = (minPrice + maxPrice) / 2;
-    if (avgPrice >= 1.0) {
-      return '.0f'; // No decimals for prices >= 1.0
+    
+    // Determine format based on average price
+    let tickformat: string;
+    let dtick: number | undefined;
+    
+    if (avgPrice >= 1000) {
+      // For prices >= 1000, check if we need decimals to avoid duplicates
+      if (priceRange < 10) {
+        tickformat = ',.1f'; // Use 1 decimal for small ranges
+        dtick = Math.max(1, priceRange / 8); // Ensure reasonable tick spacing
+      } else {
+        tickformat = ',.0f'; // No decimals for larger ranges
+        dtick = Math.max(10, Math.round(priceRange / 8 / 10) * 10); // Round to nice intervals
+      }
+    } else if (avgPrice >= 1.0) {
+      // For prices 1-1000, check range to determine decimals needed
+      if (priceRange < 1) {
+        tickformat = ',.2f'; // Use 2 decimals for very small ranges
+        dtick = Math.max(0.1, priceRange / 8);
+      } else if (priceRange < 10) {
+        tickformat = ',.1f'; // Use 1 decimal for small ranges
+        dtick = Math.max(0.5, priceRange / 8);
+      } else {
+        tickformat = ',.0f'; // No decimals for larger ranges
+        dtick = Math.max(1, Math.round(priceRange / 8));
+      }
     } else if (avgPrice >= 0.1) {
-      return '.2f'; // 2 decimals for prices 0.1-1.0
+      tickformat = ',.3f'; // 3 decimals for prices 0.1-1.0
+      dtick = Math.max(0.01, priceRange / 8);
     } else if (avgPrice >= 0.01) {
-      return '.3f'; // 3 decimals for prices 0.01-0.1
+      tickformat = ',.4f'; // 4 decimals for prices 0.01-0.1
+      dtick = Math.max(0.001, priceRange / 8);
     } else {
-      return '.6f'; // 6 decimals for very small prices
+      tickformat = ',.6f'; // 6 decimals for very small prices
+      dtick = Math.max(0.000001, priceRange / 8);
     }
+    
+    return { tickformat, dtick };
   };
 
   // Create plotly layout with improved candlestick rendering and conditional volume subplot
   const plotlyLayout: Partial<Layout> = useMemo(() => {
-    // Calculate appropriate price tick format
+    // Calculate appropriate price tick format and spacing
     const minPrice = chartData.length > 0 ? Math.min(...chartData.map(d => d.low)) : 0;
     const maxPrice = chartData.length > 0 ? Math.max(...chartData.map(d => d.high)) : 1;
-    const priceTickFormat = getPriceTickFormat(minPrice, maxPrice);
+    const priceTickConfig = getPriceTickConfig(minPrice, maxPrice);
 
     const layout: Partial<Layout> = {
       plot_bgcolor: 'rgba(0,0,0,0)',
@@ -1282,7 +1308,8 @@ const ChartDisplay = ({
         linecolor: 'rgba(75, 85, 99, 0.5)',
         tickcolor: 'rgba(75, 85, 99, 0.5)',
         showgrid: true,
-        tickformat: priceTickFormat, // Dynamic formatting based on price range
+        tickformat: priceTickConfig.tickformat, // Dynamic formatting based on price range
+        dtick: priceTickConfig.dtick, // Dynamic tick spacing to prevent duplicates
         autorange: true,
         side: 'left',
         title: {
@@ -1299,6 +1326,16 @@ const ChartDisplay = ({
       annotations: patternAnnotations,
       showlegend: false,
       hovermode: 'x unified',
+      // Customize hover text appearance to be lighter
+      hoverlabel: {
+        bgcolor: 'rgba(0, 0, 0, 0.6)', // Semi-transparent dark background
+        bordercolor: 'rgba(255, 255, 255, 0.3)', // Light border
+        font: {
+          color: '#e5e7eb', // Light gray text color
+          size: 12,
+          family: 'Inter, system-ui, sans-serif'
+        }
+      },
       // Improve candlestick rendering
       bargap: 0.1, // Space between candlesticks as fraction of bar width
       bargroupgap: 0.0, // Space between groups
@@ -1313,7 +1350,7 @@ const ChartDisplay = ({
         linecolor: 'rgba(75, 85, 99, 0.3)',
         tickcolor: 'rgba(75, 85, 99, 0.3)',
         showgrid: false,
-        tickformat: '.2s', // Scientific notation for large volume numbers
+        tickformat: ',.0f', // Thousand separators for volume numbers
         autorange: true,
         side: 'left',
         title: {
@@ -1388,7 +1425,7 @@ const ChartDisplay = ({
           <div className="text-lg font-semibold">
             ${priceStats?.high24h?.toLocaleString() || 'Loading...'}
           </div>
-          <div className="text-xs text-muted-foreground">{timeframe === '1d' ? '30d' : timeframe === '4h' ? '7d' : '24h'}</div>
+          <div className="text-xs text-muted-foreground">30d</div>
         </div>
         <div className="bg-background/30 backdrop-blur-sm border border-border/50 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
@@ -1398,7 +1435,7 @@ const ChartDisplay = ({
           <div className="text-lg font-semibold">
             ${priceStats?.low24h?.toLocaleString() || 'Loading...'}
           </div>
-          <div className="text-xs text-muted-foreground">{timeframe === '1d' ? '30d' : timeframe === '4h' ? '7d' : '24h'}</div>
+          <div className="text-xs text-muted-foreground">30d</div>
         </div>
         <div className="bg-background/30 backdrop-blur-sm border border-border/50 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
@@ -1406,7 +1443,7 @@ const ChartDisplay = ({
             <span className="text-sm text-muted-foreground">Market Cap</span>
           </div>
           <div className="text-lg font-semibold">
-            {marketInfo?.market_cap ? `$${(marketInfo.market_cap / 1e9).toFixed(2)}B` : 'Loading...'}
+            {marketInfo?.market_cap ? `$${(marketInfo.market_cap / 1e9).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}B` : 'Loading...'}
           </div>
           <div className="text-xs text-muted-foreground">
             {marketInfo?.market_cap_rank ? `Rank #${marketInfo.market_cap_rank}` : ''}
@@ -1430,19 +1467,12 @@ const ChartDisplay = ({
       <div className="bg-background/30 backdrop-blur-sm border border-border/50 rounded-xl p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div className="flex items-center gap-3">
-            {/* Timeframe selector */}
+            {/* Timeframe display - hardcoded to 1D for now */}
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Timeframe:</span>
-              <Select value={timeframe} onValueChange={onTimeframeChange}>
-                <SelectTrigger className="w-20 bg-background/50 border border-border/50">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1h">1H</SelectItem>
-                  <SelectItem value="4h">4H</SelectItem>
-                  <SelectItem value="1d">1D</SelectItem>
-                </SelectContent>
-              </Select>
+              <Badge variant="outline" className="bg-background/50 border-border/50">
+                1D
+              </Badge>
             </div>
           </div>
 
